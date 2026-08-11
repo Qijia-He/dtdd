@@ -2,10 +2,14 @@
 
 Adaptive teacher takeover for on-policy distillation of math-reasoning LLMs.
 
-This repository contains the math-domain implementation of **DTDD**, built as a
-self-contained overlay on top of [thunlp/OPD](https://github.com/thunlp/OPD)
-(the On-Policy Distillation codebase, which vendors a verl fork). All upstream
-files are untouched; everything here is additive.
+This repository contains the math-domain implementation of **DTDD** together
+with the **plain OPD baseline** it is measured against. It is self-contained:
+the OPD codebase from [thunlp/OPD](https://github.com/thunlp/OPD) (commit
+`4532fd3` — a verl fork plus the baseline OPD/GRPO runners, Apache-2.0) is
+vendored under `verl/` unmodified; everything DTDD-specific is additive.
+Not vendored: upstream's LlamaFactory SFT tooling and bundled datasets — fetch
+those from the upstream repo if you need the SFT stage
+(`docs/UPSTREAM_README.md` has the original instructions).
 
 ## Method
 
@@ -48,8 +52,13 @@ recipe_dtdd/            DTDD core (overlay onto the thunlp/OPD checkout)
 ├── dtdd_takeover.py    d_k computation + splice_batch (origin_mask bookkeeping)
 ├── teacher_pool.py     frozen-teacher vLLM engine pool (+ sample_vocab_cap)
 └── run_dtdd.sh         hydra command builder (env-var driven, see knobs below)
+verl/                   vendored thunlp/OPD verl fork (UNMODIFIED upstream 4532fd3)
+verl_example/           upstream usage examples
 scripts/
 ├── train/
+│   ├── on_policy_distillation.sh   upstream plain-OPD runner
+│   ├── grpo.sh / grpo_uw.sh        upstream + cluster GRPO runners
+│   ├── on_policy_distillation_uw.sh  cluster OPD runner (used by run_opd.sbatch)
 │   ├── run_dtdd.sbatch     SLURM + apptainer launcher (DTDD arm)
 │   ├── run_opd.sbatch      OPD baseline arm
 │   ├── run_grpo.sbatch     GRPO (pure RL) reference arm
@@ -66,28 +75,20 @@ docs/SETTINGS.md        experiment matrix: models, data, τ, lengths, steps
 
 ## Installation
 
-1. Clone the base repo and check out the pinned commit:
-
-```bash
-git clone https://github.com/thunlp/OPD.git opd-base
-cd opd-base && git checkout 4532fd3
-```
-
-2. Overlay this repository on top of it:
+1. Clone (self-contained — the OPD/verl base is vendored):
 
 ```bash
 git clone https://github.com/Qijia-He/opd.git
-cp -r opd/recipe_dtdd opd/scripts opd-base/
-export OPD_ROOT=$(pwd)/opd-base
+export OPD_ROOT=$(pwd)/opd
 ```
 
-3. Environment: follow thunlp/OPD's install (verl + vLLM ≥ 0.11). The SLURM
+2. Environment: follow thunlp/OPD's install (verl + vLLM ≥ 0.11). The SLURM
    scripts assume an apptainer image with that environment; set `SIF` to your
    image path (or strip the `apptainer exec` wrappers and run in a conda env).
    Placeholders you must set: `OPD_ROOT`, `SIF`, `YOUR_ACCOUNT`,
    `YOUR_GPU_PARTITION`, and optionally `WANDB_ENTITY`.
 
-4. Models and data (not shipped): student/teacher HF checkpoints under
+3. Models and data (not shipped): student/teacher HF checkpoints under
    `${OPD_ROOT}/models/`, DAPO-Math-17k parquet under `${OPD_ROOT}/datasets/`,
    eval parquets (AIME24/25, AMC23, …) under the paths in
    `recipe_dtdd/run_dtdd.sh`.
