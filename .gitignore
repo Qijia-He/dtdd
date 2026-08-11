@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+logs/
+outputs/
+wandb/
+*.out
+*.err
+.jid*
+*.jids
+checkpoint/
+models/
+datasets/*.parquet
