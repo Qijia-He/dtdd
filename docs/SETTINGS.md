@@ -4,7 +4,7 @@ All settings share: GRPO-style token-level distillation reward on the
 student's own tokens (top-16 teacher/student probability comparison,
 `only_stu` strategy), teacher-written takeover suffixes learned by imitation,
 `data.shuffle=False` for paired arms, held-out eval = decoupled vLLM avg@16 at
-16384 tokens on AIME24 / AIME25 / AMC23.
+31744 tokens on AIME24 / AIME25 / AMC23.
 
 | setting | student ← teacher | data | len | τ / mode | steps | launch |
 |---|---|---|---|---|---|---|

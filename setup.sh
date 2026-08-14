@@ -75,7 +75,7 @@ Base ready.
 
 Next:
   1. export OPD_ROOT=$ROOT
-  2. export SIF=/path/to/verl_vllm011.sif        # see docs/ENVIRONMENT.md
+  2. export SIF=/path/to/verl_vllm011.sif        # see README "Environment"
      export EXTRA_PKGS=/path/to/math-verify-dir  # pip install --target
   3. put student/teacher HF checkpoints under models/ and the training parquet
      under datasets/ (see README "Models and data")
