@@ -38,7 +38,7 @@ def extract_max_number(path):
     return -1  # If there is no number, keep this entry at the end.
 
 # Collect model paths and sort them by descending numeric suffix.
-MODEL_FOLDER = ""  # UW: original definition is commented upstream; env EVAL_MODELS drives the list
+MODEL_FOLDER = ""  # original definition is commented out upstream; env EVAL_MODELS drives the list
 try:
     model_files = os.listdir(MODEL_FOLDER)
     MODEL_NAMES_CANDIDATES = [os.path.join(MODEL_FOLDER, f) for f in model_files]
@@ -48,7 +48,7 @@ except FileNotFoundError:
 
 # Active model list.
 MODEL_NAMES = MODEL_NAMES_CANDIDATES
-# UW: model list from env (colon-separated), overriding the hardcode above.
+# model list from env (colon-separated), overriding the hardcoded path above.
 import os as _os
 if _os.environ.get("EVAL_MODELS"):
     MODEL_NAMES = _os.environ["EVAL_MODELS"].split(":")

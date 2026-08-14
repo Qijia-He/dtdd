@@ -12,7 +12,8 @@
 # Const-rate, not fixed tau (DTDD_RATE=0.45, no DTDD_TAU):
 #   1. dose control -- full demos close the pattern gap faster, so under fixed tau
 #      the dose would self-anneal and confound "mechanism" with "data quantity";
-#   2. fixed tau mis-calibrates as the d_k distribution shifts (see WebShop's 85%);
+#   2. a fixed tau mis-calibrates once the d_k distribution shifts -- we have seen
+#      it drift to ~85% takeover on another domain;
 #   3. 0.45 matches the realized takeover of the clean fixed-tau suffix arm, making
 #      OPD / suffix-DTDD / restart-DTDD comparable at equal teacher budget.
 set -euo pipefail

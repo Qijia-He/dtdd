@@ -134,7 +134,8 @@ scripts/
 │   ├── run_dtdd.sbatch  SLURM + apptainer launcher — DTDD arm
 │   ├── run_opd.sbatch   OPD baseline arm
 │   ├── run_grpo.sbatch  GRPO (pure RL) reference arm
-│   ├── *_uw.sh          the OPD/GRPO runners these launchers call
+│   ├── run_opd.sh       the OPD/GRPO hydra command builders these launchers call
+│   ├── run_grpo.sh
 │   └── settings/        one submit script per paper setting
 ├── eval/                merge checkpoint → generate (vLLM) → grade
 └── data/                difficulty tagging, hard-gap subset construction

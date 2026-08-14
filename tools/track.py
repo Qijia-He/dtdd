@@ -1,31 +1,30 @@
 #!/usr/bin/env python3
-"""Live one-screen tracker for all running experiments.
+"""Live one-screen tracker for running experiments.
 
-SITE-SPECIFIC REFERENCE: this is the dashboard we ran during the 2026-07/08
-campaign, spanning this repo's math lane and a separate agentic lane (the
-"agent"/"bench" entries in KNOWN). Edit KNOWN and the env paths for your own
-runs; the useful ideas are (a) job -> current-step resolution from run logs,
-(b) surfacing jobs that ENDED without their success marker -- SLURM's COMPLETED
-state alone hides those.
+Two ideas worth keeping, whatever your job names are: resolve each running job
+to its current training step by reading its own log, and surface jobs that
+ENDED WITHOUT their success marker -- SLURM's COMPLETED state alone hides a run
+that exited early, and those are exactly the ones you want to see.
 
     python3 tools/track.py           # one-shot dashboard
     python3 tools/track.py --watch N # refresh every N seconds
-Reads squeue + run logs + the results store. No side effects.
+
+Reads squeue + run logs + the results store. No side effects. Edit KNOWN to
+match your job names.
 """
 import subprocess, re, os, json, glob, sys, time
 
 OPD  = os.environ.get("OPD_ROOT", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-AG   = os.environ.get("AGENT_CKPTS", "")          # agentic lane, optional
-CSEL = os.environ.get("SCRATCH2_LOGS", "")        # second log dir, optional
 MLOG = f"{OPD}/logs"
 STORE= f"{OPD}/results/eval_results.jsonl"
 USER = os.environ.get("USER", "")
 
-# job-name prefix -> (label, kind, where progress lives)   -- EDIT ME
+# job-name prefix -> (label, kind, glob for its log)   -- EDIT ME
 KNOWN = [
- ("dtddA_taufix",  "MATH  cold-start DTDD (tau=0.2)",      "math",  f"{MLOG}/dtddA_taufix_*.out"),
- ("dtddB",         "MATH  length-sweep DTDD arm",          "math",  f"{MLOG}/dtddB_*.out"),
- ("autoeval_",     "EVAL  auto-submitted held-out eval",   "misc",  None),
+ ("dtdd",      "DTDD arm",                         "math", f"{MLOG}/dtdd*.out"),
+ ("opd",       "OPD baseline arm",                 "math", f"{MLOG}/opd*.out"),
+ ("grpo",      "GRPO reference arm",               "math", f"{MLOG}/grpo*.out"),
+ ("autoeval_", "auto-submitted held-out eval",     "misc", None),
 ]
 
 def sh(c):
@@ -68,7 +67,7 @@ def once():
         if len(p)<4: continue
         jid,name,state,el=p[0],p[1],p[2],p[3]
         if state in ("RUNNING","PENDING"): continue
-        o=glob.glob(f"{MLOG}/{name}_{jid}.out") + (glob.glob(f"{CSEL}/{name}_{jid}.out") if CSEL else [])
+        o=glob.glob(f"{MLOG}/{name}_{jid}.out")
         txt=open(o[0],errors="ignore").read() if o else ""
         ok_marker=any(k in txt for k in ("EVAL_DONE","SMOKE_OK","Training completed"))
         h,m,s=(el.split("-")[-1].split(":")+["0","0"])[:3]

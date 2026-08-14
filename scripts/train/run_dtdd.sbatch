@@ -25,7 +25,7 @@ cd ${OPD_ROOT}
 SIF=${SIF:?set SIF to your verl+vllm apptainer image}
 EXTRA_PKGS=${EXTRA_PKGS:-}
 
-# Node-local, job-scoped caches (gscratch file-count quota protection).
+# Node-local, job-scoped caches: keeps per-job churn off a quota-limited shared fs.
 JOB_TMP=/tmp/${USER}_${SLURM_JOB_ID}
 mkdir -p $JOB_TMP/{triton_cache,triton_home,inductor_cache,tmp,ray,wandb,wandb_data,xdg}
 trap "rm -rf $JOB_TMP 2>/dev/null || true" EXIT
