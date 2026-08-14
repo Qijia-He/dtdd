@@ -244,6 +244,7 @@ python3 recipe_dtdd/main_dtdd.py \
     trainer.default_local_dir="$CKPT_PATH" \
     trainer.is_plot=$IS_PLOT \
     ${EXTRA_ARGS:-}
+rc=$?
 
 # Log the end time for local runs.
 if [ -z "$SLURM_JOB_ID" ]; then
@@ -251,3 +252,7 @@ if [ -z "$SLURM_JOB_ID" ]; then
     echo "End time: $(date)"
     echo "=========================================="
 fi
+
+# Propagate the trainer's exit code: without this a crashed run falls through
+# to the block above and the SLURM job reports COMPLETED 0:0.
+exit $rc
