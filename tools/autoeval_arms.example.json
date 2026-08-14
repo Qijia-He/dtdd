@@ -1,0 +1,5 @@
+{
+  "_comment": "copy to autoeval_arms.json; dir is absolute or relative to OPD_ROOT and must hold verl global_step_<N>/actor/ checkpoints",
+  "dtdd_15k": {"dir": "checkpoint/dtddB_15k", "every": 20},
+  "opd_15k": {"dir": "checkpoint/opdB_15k", "every": 20}
+}

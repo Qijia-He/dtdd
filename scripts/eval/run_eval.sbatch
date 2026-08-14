@@ -14,7 +14,7 @@
 # Driven entirely by env so autoeval.py can point it at any arm:
 #   ARM=<eval name prefix>  CKDIR=<abs checkpoint dir>  STEPS="20 40 ..."
 # Results land in scripts/val/eval/justrl_eval_outputs/<ARM>_s<STEP>/ and are picked up
-# by results/harvest.py into the checkpoint-free results store.
+# by tools/harvest.py into the checkpoint-free results store.
 set -o pipefail
 cd ${OPD_ROOT}
 SIF=${SIF:?set SIF to your verl+vllm apptainer image}

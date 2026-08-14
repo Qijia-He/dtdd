@@ -70,7 +70,11 @@ scripts/
 └── data/
     ├── tag_difficulty.py   difficulty tagging for DAPO-Math-17k
     └── tag_hard_pair.py    builds the hard-gap subset {student pass@4=0 ∩ teacher ≥ .5}
+tools/                  optional SLURM automation (auto-eval on checkpoint save,
+                        results harvesting, monitor daemon) — see tools/README.md
 docs/SETTINGS.md        experiment matrix: models, data, τ, lengths, steps
+docs/ENVIRONMENT.md     the locked container environment behind every result
+requirements-lock.txt   full pip freeze of that environment
 ```
 
 ## Installation
@@ -82,11 +86,15 @@ git clone https://github.com/Qijia-He/opd.git
 export OPD_ROOT=$(pwd)/opd
 ```
 
-2. Environment: follow thunlp/OPD's install (verl + vLLM ≥ 0.11). The SLURM
-   scripts assume an apptainer image with that environment; set `SIF` to your
-   image path (or strip the `apptainer exec` wrappers and run in a conda env).
-   Placeholders you must set: `OPD_ROOT`, `SIF`, `YOUR_ACCOUNT`,
-   `YOUR_GPU_PARTITION`, and optionally `WANDB_ENTITY`.
+2. Environment — **locked**, see [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
+   Every result was produced inside the official verl container image
+   (`verlai/verl:vllm011`, digest pinned there; torch 2.8.0+cu128 / vLLM 0.11.0
+   / flash-attn 2.8.1) plus one `pip --target` dir with `math-verify==0.9.0`;
+   [`requirements-lock.txt`](requirements-lock.txt) is the full freeze. The
+   SLURM scripts assume that image as an apptainer SIF; set `SIF` to its path
+   (or strip the `apptainer exec` wrappers and run in a conda env verified
+   against the lock file). Placeholders you must set: `OPD_ROOT`, `SIF`,
+   `YOUR_ACCOUNT`, `YOUR_GPU_PARTITION`, and optionally `WANDB_ENTITY`.
 
 3. Models and data (not shipped): student/teacher HF checkpoints under
    `${OPD_ROOT}/models/`, DAPO-Math-17k parquet under `${OPD_ROOT}/datasets/`,

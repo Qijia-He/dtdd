@@ -10,3 +10,6 @@ wandb/
 checkpoint/
 models/
 datasets/*.parquet
+
+# user-local autoeval config
+tools/autoeval_arms.json
