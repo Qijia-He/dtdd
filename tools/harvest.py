@@ -3,7 +3,7 @@
 results/eval_results.jsonl. One row =
 {domain, arm, step, benchmark, metric, value, n, source}.
 
-Source: scripts/val/eval/justrl_eval_outputs/<arm>_s<step>/grading_results.json
+Source: scripts/eval/justrl_eval_outputs/<arm>_s<step>/grading_results.json
 (what scripts/eval/run_eval.sbatch leaves behind).
 
 Once a row exists here, the checkpoint that produced it is disposable -- the
@@ -21,7 +21,7 @@ OPD = os.environ.get(
 OUT = f"{OPD}/results/eval_results.jsonl"
 rows = []
 
-for f in glob.glob(f"{OPD}/scripts/val/eval/justrl_eval_outputs/*/grading_results.json"):
+for f in glob.glob(f"{OPD}/scripts/eval/justrl_eval_outputs/*/grading_results.json"):
     tag = os.path.basename(os.path.dirname(f))
     m = re.search(r"^(.*?)[_]?s(?:tep)?[_]?(\d+)$", tag)
     arm, step = (m.group(1), int(m.group(2))) if m else (tag, None)

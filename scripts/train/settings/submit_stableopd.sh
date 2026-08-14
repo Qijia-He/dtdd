@@ -43,20 +43,20 @@ if [ "$MODE" = "launch" ]; then
   jc=$(sbatch --parsable --job-name=so_cal $SBATCH_GPU4 \
     --export="${COMMON},DTDD_ENABLE=1,DTDD_DRY_RUN=1,DTDD_DK_DUMP=${OPD_ROOT}/reports/stableopd_dk,\
 USER_EXTRA_ARGS=${BASE} trainer.default_local_dir=checkpoint/stableopd_cal trainer.total_training_steps=10 trainer.save_freq=-1,WANDB_PROJECT=dtdd_stableopd" \
-    run_dtdd_uw_apptainer.sbatch)
+    scripts/train/run_dtdd.sbatch)
   echo "CAL  submitted: $jc -> logs/so_cal_${jc}.out (read dtdd/would_trigger@tau lines)"
 
   # --- OPD arm (expect collapse; needs no tau) ---
   jo=$(sbatch --parsable --job-name=so_opd $SBATCH_GPU4 \
     --export="${COMMON},USER_EXTRA_ARGS=${BASE} trainer.default_local_dir=checkpoint/stableopd_opd,WANDB_PROJECT=dtdd_stableopd" \
-    run_opd_uw_apptainer.sbatch)
+    scripts/train/run_opd.sbatch)
   echo "OPD  submitted: $jo -> logs/so_opd_${jo}.out"
   echo "$jc $jo" > .stableopd_jids
 
 elif [ "$MODE" = "opd" ]; then
   jo=$(sbatch --parsable --job-name=so_opd $SBATCH_GPU4 \
     --export="${COMMON},USER_EXTRA_ARGS=${BASE} trainer.default_local_dir=checkpoint/stableopd_opd,WANDB_PROJECT=dtdd_stableopd" \
-    run_opd_uw_apptainer.sbatch)
+    scripts/train/run_opd.sbatch)
   echo "OPD  submitted: $jo -> logs/so_opd_${jo}.out"
   echo "$jo" >> .stableopd_jids
 
@@ -70,7 +70,7 @@ elif [ "$MODE" = "dtdd" ]; then
     --error=${OPD_ROOT}/logs/%x_%j.err \
     --export="${COMMON},DTDD_ENABLE=1,DTDD_TAU=${TAU},DTDD_TEACHER_ENGINES=2,DTDD_TEACHER_GPU_OFFSET=4,DTDD_TEACHER_GPU_UTIL=0.8,\
 USER_EXTRA_ARGS=${BASE} trainer.default_local_dir=checkpoint/stableopd_dtdd,WANDB_PROJECT=dtdd_stableopd" \
-    run_dtdd_uw_apptainer.sbatch)
+    scripts/train/run_dtdd.sbatch)
   echo "DTDD submitted: $jd (tau=${TAU}) -> logs/so_dtdd_${jd}.out"
   echo "$jd" >> .stableopd_jids
 else

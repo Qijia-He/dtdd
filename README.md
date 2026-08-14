@@ -2,14 +2,17 @@
 
 Adaptive teacher takeover for on-policy distillation of math-reasoning LLMs.
 
-This repository contains the math-domain implementation of **DTDD** together
-with the **plain OPD baseline** it is measured against. It is self-contained:
-the OPD codebase from [thunlp/OPD](https://github.com/thunlp/OPD) (commit
-`4532fd3` — a verl fork plus the baseline OPD/GRPO runners, Apache-2.0) is
-vendored under `verl/` unmodified; everything DTDD-specific is additive.
-Not vendored: upstream's LlamaFactory SFT tooling and bundled datasets — fetch
-those from the upstream repo if you need the SFT stage
-(`docs/UPSTREAM_README.md` has the original instructions).
+This repository contains the math-domain implementation of **DTDD** and the
+cluster harness used to run it against the **plain OPD baseline**.
+
+DTDD is an *overlay*, not a fork: everything here is additive, and the OPD/verl
+base it attaches to ([thunlp/OPD](https://github.com/thunlp/OPD), Apache-2.0 —
+a verl fork in which plain OPD itself lives) is **not** copied into this repo.
+`./setup.sh` clones that base at the pinned commit `4532fd3` that every number
+in the paper was produced with, and links it in. So what you see below is
+exactly the code we wrote: ~500 lines of DTDD plus its launchers, evaluation
+and tooling. Upstream's SFT stage (LlamaFactory) is out of scope;
+`docs/UPSTREAM_README.md` keeps their original instructions.
 
 ## Method
 
@@ -46,22 +49,20 @@ sit in the batch), so all claims must come from held-out evaluation.
 ## Layout
 
 ```
-recipe_dtdd/            DTDD core (overlay onto the thunlp/OPD checkout)
-├── main_dtdd.py        entry point (hydra; wraps the OPD trainer)
+setup.sh                fetches the OPD/verl base at the pinned commit, links it in
+recipe_dtdd/            DTDD core — the method, ~500 lines
+├── main_dtdd.py        entry point (hydra; swaps the trainer inside Ray's TaskRunner)
 ├── dtdd_trainer.py     trainer wrapper: d_k scoring, trigger, batch splice, metrics
 ├── dtdd_takeover.py    d_k computation + splice_batch (origin_mask bookkeeping)
 ├── teacher_pool.py     frozen-teacher vLLM engine pool (+ sample_vocab_cap)
 └── run_dtdd.sh         hydra command builder (env-var driven, see knobs below)
-verl/                   vendored thunlp/OPD verl fork (UNMODIFIED upstream 4532fd3)
-verl_example/           upstream usage examples
 scripts/
 ├── train/
-│   ├── on_policy_distillation.sh   upstream plain-OPD runner
-│   ├── grpo.sh / grpo_uw.sh        upstream + cluster GRPO runners
-│   ├── on_policy_distillation_uw.sh  cluster OPD runner (used by run_opd.sbatch)
 │   ├── run_dtdd.sbatch     SLURM + apptainer launcher (DTDD arm)
 │   ├── run_opd.sbatch      OPD baseline arm
 │   ├── run_grpo.sbatch     GRPO (pure RL) reference arm
+│   ├── on_policy_distillation_uw.sh  OPD runner (cluster port of upstream's)
+│   ├── grpo_uw.sh          GRPO runner (same)
 │   └── settings/           one submit script per paper setting (see docs/SETTINGS.md)
 ├── eval/
 │   ├── gen_vllm.py         decoupled generation (vLLM, avg@16, 16384 tokens)
@@ -75,16 +76,27 @@ tools/                  optional SLURM automation (auto-eval on checkpoint save,
 docs/SETTINGS.md        experiment matrix: models, data, τ, lengths, steps
 docs/ENVIRONMENT.md     the locked container environment behind every result
 requirements-lock.txt   full pip freeze of that environment
+
+# created by setup.sh, git-ignored:
+third_party/OPD/        the thunlp/OPD base @4532fd3 (verl fork, upstream runners,
+                        usage examples, benchmark parquets)
+verl -> third_party/OPD/verl
+datasets/test_data -> third_party/OPD/scripts/val/data
 ```
 
 ## Installation
 
-1. Clone (self-contained — the OPD/verl base is vendored):
+1. Clone, then fetch the OPD/verl base it overlays onto:
 
 ```bash
 git clone https://github.com/Qijia-He/opd.git
-export OPD_ROOT=$(pwd)/opd
+cd opd && export OPD_ROOT=$(pwd)
+./setup.sh          # clones thunlp/OPD@4532fd3 -> third_party/, links verl/
 ```
+
+`setup.sh` is idempotent and verifies both the pinned commit and the two
+upstream symbols the overlay patches, so a moved base fails loudly instead of
+silently training something else.
 
 2. Environment — **locked**, see [docs/ENVIRONMENT.md](docs/ENVIRONMENT.md).
    Every result was produced inside the official verl container image
@@ -96,10 +108,11 @@ export OPD_ROOT=$(pwd)/opd
    against the lock file). Placeholders you must set: `OPD_ROOT`, `SIF`,
    `YOUR_ACCOUNT`, `YOUR_GPU_PARTITION`, and optionally `WANDB_ENTITY`.
 
-3. Models and data (not shipped): student/teacher HF checkpoints under
-   `${OPD_ROOT}/models/`, DAPO-Math-17k parquet under `${OPD_ROOT}/datasets/`,
-   eval parquets (AIME24/25, AMC23, …) under the paths in
-   `recipe_dtdd/run_dtdd.sh`.
+3. Models and training data (not shipped): student/teacher HF checkpoints under
+   `${OPD_ROOT}/models/`, the DAPO-Math-17k parquet under
+   `${OPD_ROOT}/datasets/` (`TRAIN_DATASET` in `recipe_dtdd/run_dtdd.sh`). The
+   held-out benchmark parquets (AIME24/25, AMC23, MATH-500, …) need no action —
+   they come with the base and `setup.sh` links them to `datasets/test_data`.
 
 ## Quickstart — one DTDD arm
 

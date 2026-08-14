@@ -23,13 +23,13 @@ A100="--partition=YOUR_GPU_PARTITION --gpus=4 --gpus-per-node=4 --cpus-per-task=
 jid_opd=$(sbatch --parsable --job-name=opdB_18k $A100 \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
-  --export="$COMMON" run_opd_uw_apptainer.sbatch)
+  --export="$COMMON" scripts/train/run_opd.sbatch)
 echo "OPD  18K submitted: $jid_opd -> logs/opdB_18k_${jid_opd}.out"
 
 jid_dtdd=$(sbatch --parsable --job-name=dtddB_18k $A100 \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
-  --export="$COMMON" run_dtdd_uw_apptainer.sbatch)
+  --export="$COMMON" scripts/train/run_dtdd.sbatch)
 echo "DTDD 18K submitted: $jid_dtdd -> logs/dtddB_18k_${jid_dtdd}.out"
 
 echo "$jid_opd $jid_dtdd" > .len18k_jids

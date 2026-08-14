@@ -59,4 +59,4 @@ fi
 export EXTRA_ARGS="$EXTRA ${USER_EXTRA_ARGS:-}"
 
 apptainer exec --nv --bind "${BIND_ROOT:-$PWD}" "$SIF" \
-  bash grpo_uw.sh
+  bash scripts/train/grpo_uw.sh

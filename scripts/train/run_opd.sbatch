@@ -61,4 +61,4 @@ fi
 export EXTRA_ARGS="$EXTRA ${USER_EXTRA_ARGS:-}"
 
 apptainer exec --nv --bind "${BIND_ROOT:-$PWD}" "$SIF" \
-  bash on_policy_distillation_uw.sh
+  bash scripts/train/on_policy_distillation_uw.sh

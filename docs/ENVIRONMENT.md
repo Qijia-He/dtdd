@@ -29,7 +29,8 @@ Then point the SLURM scripts at it: `export SIF=/path/to/verl_vllm011.sif`.
 The image is executed read-only; all project code arrives via `PYTHONPATH`
 (see `scripts/train/run_dtdd.sbatch`):
 
-1. `${OPD_ROOT}/verl` — the vendored thunlp/OPD verl fork (this repo).
+1. `${OPD_ROOT}/verl` — the thunlp/OPD verl fork, fetched by `./setup.sh`
+   (symlink into `third_party/OPD/`, pinned at commit `4532fd3`).
 2. `${OPD_ROOT}/recipe_dtdd` — the DTDD overlay (this repo).
 3. `${EXTRA_PKGS}` — a single pip `--target` directory holding the grader
    dependency the image lacks:

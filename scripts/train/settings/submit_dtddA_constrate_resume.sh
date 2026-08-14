@@ -23,6 +23,6 @@ jid=$(sbatch --parsable --job-name=dtddA_constrate_rs \
   --partition=YOUR_GPU_PARTITION --gpus=2 --gpus-per-node=2 --cpus-per-task=12 --mem=200G --time=5-00:00:00 \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
-  --export="$COMMON" run_dtdd_uw_apptainer.sbatch)
+  --export="$COMMON" scripts/train/run_dtdd.sbatch)
 echo "constrate resume (from step 120, rate=0.25): $jid"
 echo "$jid" > .dtddA_constrate_resume_jid

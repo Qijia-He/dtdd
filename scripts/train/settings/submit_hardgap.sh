@@ -31,7 +31,7 @@ jid_opd=$(sbatch --parsable \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
   --export="$COMMON_ENV" \
-  run_opd_uw_apptainer.sbatch)
+  scripts/train/run_opd.sbatch)
 echo "OPD  hard-gap submitted: $jid_opd  -> logs/opd_hardgap_${jid_opd}.out"
 
 # DTDD arm (teacher takeover injects the correct trajectory the student can't sample)
@@ -41,7 +41,7 @@ jid_dtdd=$(sbatch --parsable \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
   --export="$COMMON_ENV" \
-  run_dtdd_uw_apptainer.sbatch)
+  scripts/train/run_dtdd.sbatch)
 echo "DTDD hard-gap submitted: $jid_dtdd -> logs/dtdd_hardgap_${jid_dtdd}.out"
 
 echo "$jid_opd $jid_dtdd" > .hardgap_jids

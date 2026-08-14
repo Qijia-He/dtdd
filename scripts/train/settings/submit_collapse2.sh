@@ -30,7 +30,7 @@ jo=$(sbatch --parsable --job-name=opd_c2 \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
   --export="${COMMON},USER_EXTRA_ARGS=${BASE} trainer.default_local_dir=checkpoint/collapse2_opd,WANDB_PROJECT=dtdd_collapse2" \
-  run_opd_uw_apptainer.sbatch)
+  scripts/train/run_opd.sbatch)
 echo "OPD  collapse2 submitted: $jo -> logs/opd_c2_${jo}.out"
 
 # --- DTDD arm (rescue; adaptive takeover, JustRL 1.5B teacher pool on a40) ---
@@ -39,7 +39,7 @@ jd=$(sbatch --parsable --job-name=dtdd_c2 \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
   --export="${COMMON},USER_EXTRA_ARGS=${BASE} trainer.default_local_dir=checkpoint/collapse2_dtdd,DTDD_ENABLE=1,STUDENT_GPU_UTIL=0.5,DTDD_TEACHER_GPU_UTIL=0.12,WANDB_PROJECT=dtdd_collapse2" \
-  run_dtdd_uw_apptainer.sbatch)
+  scripts/train/run_dtdd.sbatch)
 echo "DTDD collapse2 submitted: $jd -> logs/dtdd_c2_${jd}.out"
 
 echo "$jo $jd" > .collapse2_jids

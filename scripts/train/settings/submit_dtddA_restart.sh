@@ -34,5 +34,5 @@ jid=$(sbatch --parsable \
   --partition=YOUR_GPU_PARTITION --gpus=2 --gpus-per-node=2 --cpus-per-task=12 --mem=240G \
   --time=${WALLTIME:-2-08:00:00} \
   --export="$COMMON" \
-  run_dtdd_uw_apptainer.sbatch)
+  scripts/train/run_dtdd.sbatch)
 echo "dtddA_restart submitted: $jid -> logs/dtddA_restart_${jid}.out"

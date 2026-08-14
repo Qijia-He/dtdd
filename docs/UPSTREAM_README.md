@@ -1,4 +1,10 @@
-﻿<div align="center">
+﻿> **Note (this fork).** Verbatim README of the upstream base,
+> [thunlp/OPD](https://github.com/thunlp/OPD) @ `4532fd3`, kept for the SFT
+> stage and its verl-v0.7 validation caveat. Every path below is relative to
+> that checkout, which `./setup.sh` places at `third_party/OPD/` — e.g.
+> `scripts/val/eval` means `third_party/OPD/scripts/val/eval`.
+
+<div align="center">
 
 # Rethinking On-Policy Distillation of Large Language Models:<br>Phenomenology, Mechanism, and Recipe
 

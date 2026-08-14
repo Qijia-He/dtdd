@@ -32,7 +32,7 @@ jid=$(sbatch --parsable \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
   --export="$COMMON" \
-  run_dtdd_uw_apptainer.sbatch)
+  scripts/train/run_dtdd.sbatch)
 echo "dtddA taufix submitted: $jid -> logs/dtddA_taufix_${jid}.out (resume_from global_step_100, tau=0.2)"
 echo "$jid" > .dtddA_taufix_rs_jid
 squeue -h -j "$jid" -o "%i %T %R" 2>/dev/null

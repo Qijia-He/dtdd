@@ -27,7 +27,7 @@ jid=$(sbatch --parsable \
   --output=${OPD_ROOT}/logs/%x_%j.out \
   --error=${OPD_ROOT}/logs/%x_%j.err \
   --export="$COMMON" \
-  run_opd_uw_apptainer.sbatch)
+  scripts/train/run_opd.sbatch)
 echo "OPD-from-base DENSE submitted: $jid -> logs/opd_from_base_dense_${jid}.out"
 echo "$jid" > .opdbase_dense_jid
 squeue -h -j "$jid" -o "%i %T %R" 2>/dev/null

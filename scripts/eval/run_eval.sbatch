@@ -13,7 +13,7 @@
 # Generic verl/math held-out eval: merge FSDP checkpoint(s) -> vLLM gen -> grade.
 # Driven entirely by env so autoeval.py can point it at any arm:
 #   ARM=<eval name prefix>  CKDIR=<abs checkpoint dir>  STEPS="20 40 ..."
-# Results land in scripts/val/eval/justrl_eval_outputs/<ARM>_s<STEP>/ and are picked up
+# Results land in scripts/eval/justrl_eval_outputs/<ARM>_s<STEP>/ and are picked up
 # by tools/harvest.py into the checkpoint-free results store.
 set -o pipefail
 cd ${OPD_ROOT}
@@ -46,6 +46,8 @@ echo "MERGED. EVAL_MODELS=$EVAL_MODELS"
 
 cd ${OPD_ROOT}/scripts/eval
 export PYTHONPATH=$EXTRA_PKGS
+# benchmark parquets come from the upstream base that setup.sh cloned
+export EVAL_DATA_DIR=${EVAL_DATA_DIR:-${OPD_ROOT}/third_party/OPD/scripts/val/data}
 apptainer exec --nv --bind "${BIND_ROOT:-$PWD}" "$SIF" bash -c "python3 gen_vllm.py --disable-thinking"
 
 for s in $STEPS; do

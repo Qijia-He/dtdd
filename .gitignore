@@ -1,17 +1,23 @@
 __pycache__/
 *.pyc
-# repo-root run artifacts ONLY -- must stay anchored: unanchored `models/` etc.
-# silently dropped verl/verl/models/ and verl/verl/utils/checkpoint/ from the
-# vendored tree and broke `import verl` (caught by the 10-step smoke test)
+# Fetched by setup.sh, never committed: the thunlp/OPD base and the verl symlink
+# into it. (Patterns below stay anchored to the repo root -- an unanchored
+# `models/`/`checkpoint/` once matched paths inside the vendored tree and
+# silently dropped 72 upstream files from a commit.)
+/third_party/
+/verl
 /logs/
 /outputs/
 /wandb/
 /checkpoint/
 /models/
-/datasets/*.parquet
+/datasets/
+/results/
 *.out
 *.err
 .jid*
 *.jids
+# eval artifacts
+scripts/eval/justrl_eval_outputs/
 # user-local autoeval config
 tools/autoeval_arms.json

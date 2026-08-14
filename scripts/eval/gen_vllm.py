@@ -25,7 +25,9 @@ except ImportError:
 # --------------------------------------------------------------------------- #
 #                   Global constants / variables                              #
 # --------------------------------------------------------------------------- #
-DATA_DIR = "../data"
+# Benchmark parquets ship with the upstream base, which setup.sh clones (this
+# script runs with cwd=scripts/eval; run_eval.sbatch also exports EVAL_DATA_DIR).
+DATA_DIR = os.environ.get("EVAL_DATA_DIR", "../../third_party/OPD/scripts/val/data")
 # MODEL_FOLDER = "../../model/Qwen3-1.7B-SFT-DAPO-4B-filtered"
 
 def extract_max_number(path):
