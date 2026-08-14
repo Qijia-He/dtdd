@@ -27,14 +27,16 @@ EXTRA_PKGS=${EXTRA_PKGS:-}
 
 # Node-local, job-scoped caches (gscratch file-count quota protection).
 JOB_TMP=/tmp/${USER}_${SLURM_JOB_ID}
-mkdir -p $JOB_TMP/{triton_cache,inductor_cache,tmp,ray,wandb,wandb_data}
+mkdir -p $JOB_TMP/{triton_cache,triton_home,inductor_cache,tmp,ray,wandb,wandb_data,xdg}
 trap "rm -rf $JOB_TMP 2>/dev/null || true" EXIT
 
 _n_gpus=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
 
 # Env for inside the container (apptainer passes host env through).
 export TRITON_CACHE_DIR=$JOB_TMP/triton_cache
+export TRITON_HOME=$JOB_TMP/triton_home  # autotune cache ignores TRITON_CACHE_DIR; a full home quota kills compiles (Errno 122)
 export TORCHINDUCTOR_CACHE_DIR=$JOB_TMP/inductor_cache
+export XDG_CACHE_HOME=$JOB_TMP/xdg  # keep vLLM's ~/.cache writes off quota-limited home
 export TMPDIR=$JOB_TMP/tmp
 export RAY_TMPDIR=$JOB_TMP/ray
 export WANDB_DIR=$JOB_TMP/wandb
