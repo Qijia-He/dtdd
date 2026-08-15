@@ -1,17 +1,9 @@
 #!/bin/bash
-#SBATCH --job-name=url
-#SBATCH --output=logs/20251004/output_%j.log
-#SBATCH --error=logs/20251004/error_%j.log
-#SBATCH --account=YOUR_ACCOUNT
-#SBATCH --partition=YOUR_GPU_PARTITION
-#SBATCH --exclude=g[81-82]
-#SBATCH --gres=gpu:8
-#SBATCH --ntasks=1
-#SBATCH --cpus-per-task=64
-#SBATCH --mem=500G
-#SBATCH --nodes=1
-#SBATCH --ntasks-per-node=1
-
+# Hydra command builder. NOT submitted directly -- the .sbatch launchers in
+# scripts/train/ run it with `bash` inside the container, and own the real
+# resource request. (The inert #SBATCH block that used to sit here was an
+# upstream leftover: it named nodes, a log directory and a GPU count that
+# contradicted the launchers.)
 set -x
 
 # Configure logging when running outside SBATCH.
@@ -109,7 +101,9 @@ export REWARD_MODEL_NAME=$(basename "$REWARD_MODEL_PATH")
 export PROJECT_PATH=checkpoint
 export PARALLEL_SIZE=1
 export CKPT_PATH=${PROJECT_PATH}/${ADV_ESTIMATOR}_${TRAIN_DATASET_NAME}_${ACTOR_MODEL_NAME}_${REWARD_MODEL_NAME}_${MAX_RESP_LENGTH}-T_${TEMPERATURE}-Tch_${TEACHER_TEMPERATURE}-n_${N_RESPONSES}-mbs_${MINI_BATCH_SIZE}-topk_${LOG_PROB_TOP_K}-topk_strategy_${TOP_K_STRATEGY}-rw_${REWARD_WEIGHT_MODE}-$(date +%Y-%m-%d_%H-%M-%S)
-export OUTLINES_CACHE_DIR=~/.cache/outlines/$(uuidgen)
+# Follows XDG_CACHE_HOME (the launchers point it at node-local scratch), and does
+# not need uuidgen -- which is absent from the container image.
+export OUTLINES_CACHE_DIR=${XDG_CACHE_HOME:-$HOME/.cache}/outlines/${SLURM_JOB_ID:-$$}
 export NCCL_DEBUG=WARN
 
 # export VLLM_ATTENTION_BACKEND=XFORMERS
@@ -188,7 +182,7 @@ python3 -m verl.trainer.main_ppo \
     +actor_rollout_ref.rollout.reward_weight_mode=$REWARD_WEIGHT_MODE \
     +actor_rollout_ref.rollout.teacher_temperature=$TEACHER_TEMPERATURE \
     actor_rollout_ref.rollout.tensor_model_parallel_size=$PARALLEL_SIZE \
-    actor_rollout_ref.rollout.gpu_memory_utilization=0.8 \
+    actor_rollout_ref.rollout.gpu_memory_utilization=${STUDENT_GPU_UTIL:-0.8} \
     actor_rollout_ref.rollout.max_model_len=$MAX_MODEL_LEN \
     actor_rollout_ref.rollout.n=$N_RESPONSES \
     actor_rollout_ref.rollout.val_kwargs.do_sample=True \
@@ -223,6 +217,7 @@ python3 -m verl.trainer.main_ppo \
     trainer.default_local_dir="$CKPT_PATH" \
     trainer.is_plot=$IS_PLOT \
     ${EXTRA_ARGS:-}
+rc=$?
 
 # Log the end time for local runs.
 if [ -z "$SLURM_JOB_ID" ]; then
@@ -230,3 +225,7 @@ if [ -z "$SLURM_JOB_ID" ]; then
     echo "End time: $(date)"
     echo "=========================================="
 fi
+
+# Propagate the trainer's exit code: without this a crashed run falls through
+# to the block above and the SLURM job reports COMPLETED 0:0.
+exit $rc
