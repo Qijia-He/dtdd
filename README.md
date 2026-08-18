@@ -7,13 +7,6 @@ finish the sequence. This repository is the math-domain implementation of that
 idea, plus the cluster harness used to run it head-to-head against plain
 on-policy distillation (OPD).
 
-DTDD is an **overlay, not a fork**. The OPD/verl base it attaches to
-([thunlp/OPD](https://github.com/thunlp/OPD), Apache-2.0 — a verl fork in which
-plain OPD itself lives) is *not* copied into this repo; `./setup.sh` fetches it
-at the pinned commit every number in the paper came from. So everything you see
-here is the code we actually wrote: ~500 lines of method, plus launchers,
-evaluation and ops tooling.
-
 ---
 
 ## Method
