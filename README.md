@@ -249,42 +249,6 @@ from the sbatch scripts.
 
 ---
 
-## Gotchas
-
-Hard-won; each one cost us real GPU-days.
-
-**DTDD is OFF by default.** An arm launched without `DTDD_ENABLE=1` silently
-trains as plain OPD and looks entirely healthy. Confirm the
-`DTDD teacher pool ready` banner in the log before trusting a run — and check
-`dtdd/trigger_rate` is non-zero.
-
-**`gpu_memory_utilization` is a whole-GPU ceiling, not a per-engine share.**
-When the teacher engine initializes after the student engine, its utilization
-value must cover everything already resident on the card, not just its own
-footprint.
-
-**Train-batch accuracy is teacher-inflated for DTDD.** Teacher-written tokens
-sit in the batch, so DTDD's training reward can lead OPD's substantially while
-held-out accuracy is a dead tie. Every claim must come from held-out evaluation;
-we learned this the expensive way, more than once.
-
-**The tripwire self-extinguishes.** As the student improves, `d_k` falls and the
-takeover rate decays toward zero on its own — and it re-fires if training
-destabilizes. Takeover rate is therefore your primary health telemetry, not a
-hyperparameter to hold fixed.
-
-**Calibrate τ per pair.** Run ~10 steps with `DTDD_DRY_RUN=1` and read the
-`would_trigger@τ` sweep. A healthy tripwire fires on roughly 5–10% of sequences
-at step 1 and decays; 25%+ is a constant-dose regime and ~1% is deaf. Pairs
-whose teacher embedding exceeds the student's need the sampling vocab cap, which
-`teacher_pool.py` applies automatically.
-
----
-
-## Citation
-
-The paper is under review; BibTeX will be added here on release.
-
 ## Acknowledgements & license
 
 Built on [thunlp/OPD](https://github.com/thunlp/OPD) and
