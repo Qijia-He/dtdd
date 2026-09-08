@@ -21,3 +21,8 @@ __pycache__/
 scripts/eval/justrl_eval_outputs/
 # user-local autoeval config
 tools/autoeval_arms.json
+# Agentic lane: run state written by trinity, all regenerable, never committed.
+# Root-anchored like the entries above, for the same reason.
+/agent_ckpts/
+/agent_buffers/
+/hf_cache/

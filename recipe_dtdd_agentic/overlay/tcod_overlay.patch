@@ -1,0 +1,253 @@
+diff --git a/trinity/buffer/utils.py b/trinity/buffer/utils.py
+index 689a8cc..8561c40 100644
+--- a/trinity/buffer/utils.py
++++ b/trinity/buffer/utils.py
+@@ -6,29 +6,51 @@ from trinity.utils.log import get_logger
+ 
+ @contextmanager
+ def retry_session(session_maker, max_retry_times: int = 2, max_retry_interval: float = 1.0):
+-    """A Context manager for retrying session."""
++    """A context manager that yields a session exactly once and retries the commit.
++
++    NOTE: a @contextmanager generator MUST yield exactly once. The previous
++    implementation put the ``yield`` inside a ``for`` retry loop, so any commit
++    failure (e.g. a transient sqlite "database is locked" under Ray's concurrent
++    writes) made the generator yield a SECOND time on retry, which contextlib
++    turns into ``RuntimeError: generator didn't stop`` -- masking the real
++    (recoverable) error and crashing the explorer. Here the body runs once and
++    only the commit is retried.
++    """
+     logger = get_logger(__name__)
+-    for attempt in range(max_retry_times):
+-        try:
+-            session = session_maker()
+-            yield session
+-            session.commit()
+-            break
+-        except StopIteration as e:
+-            raise e
+-        except Exception as e:
+-            import traceback
++    session = session_maker()
++    try:
++        yield session
++        last_exc = None
++        for attempt in range(max_retry_times):
++            try:
++                session.commit()
++                last_exc = None
++                break
++            except StopIteration:
++                raise
++            except Exception as e:  # noqa: BLE001
++                import traceback
+ 
+-            trace_str = traceback.format_exc()
+-            session.rollback()
+-            logger.warning(
+-                f"Attempt {attempt + 1} failed, retrying in {max_retry_interval} seconds..."
+-            )
+-            logger.warning(f"trace = {trace_str}")
+-            if attempt < max_retry_times - 1:
+-                time.sleep(max_retry_interval)
+-            else:
+-                logger.error("Max retry attempts reached, raising exception.")
+-                raise e
+-        finally:
+-            session.close()
++                last_exc = e
++                logger.warning(
++                    f"Commit attempt {attempt + 1}/{max_retry_times} failed, "
++                    f"retrying in {max_retry_interval}s...\n{traceback.format_exc()}"
++                )
++                # A failed commit leaves the Session in a "pending rollback" state:
++                # SQLAlchemy refuses any further use until rollback() is called.
++                # Rolling back ONLY on the final attempt (the previous behaviour) meant
++                # attempt 2 raised PendingRollbackError instead of genuinely retrying,
++                # so a transient sqlite "database is locked" still killed the explorer
++                # (seen on both DTDD and OPD runs). Always roll back first.
++                try:
++                    session.rollback()
++                except Exception:  # noqa: BLE001
++                    pass
++                if attempt < max_retry_times - 1:
++                    # exponential backoff: lock contention needs more than a flat wait
++                    time.sleep(max_retry_interval * (2**attempt))
++        if last_exc is not None:
++            logger.error("Max retry attempts reached, raising exception.")
++            raise last_exc
++    finally:
++        session.close()
+diff --git a/trinity/common/config.py b/trinity/common/config.py
+index 916a051..ce6239e 100644
+--- a/trinity/common/config.py
++++ b/trinity/common/config.py
+@@ -932,12 +932,19 @@ class Config:
+ 
+     def get_envs(self) -> Dict[str, str]:
+         """Get the environment variables from the config."""
+-        return {
++        _envs = {
+             PLUGIN_DIRS_ENV_VAR: os.getenv(PLUGIN_DIRS_ENV_VAR, ""),
+             LOG_LEVEL_ENV_VAR: self.log.level,
+             LOG_DIR_ENV_VAR: self.log.save_dir,
+             LOG_NODE_IP_ENV_VAR: "1" if self.log.group_by_node else "0",
+         }
++        # Propagate the HF cache and W&B settings to the Ray actors. Actors do not
++        # inherit the driver's environment, so pass these through when set.
++        for _k in ("HF_HOME","HF_HUB_CACHE","HF_DATASETS_CACHE","TRANSFORMERS_CACHE","WANDB_MODE","WANDB_DIR","WANDB_API_KEY","WANDB_PROJECT","ALFWORLD_DATA"):
++            _v = os.getenv(_k)
++            if _v:
++                _envs[_k] = _v
++        return _envs
+ 
+ 
+ def load_config(config_path: str) -> Config:
+diff --git a/trinity/common/models/vllm_model.py b/trinity/common/models/vllm_model.py
+index 13d9773..28e48df 100644
+--- a/trinity/common/models/vllm_model.py
++++ b/trinity/common/models/vllm_model.py
+@@ -524,6 +524,52 @@ class vLLMRolloutModel(BaseInferenceModel):
+                 method, timeout, args, kwargs
+             )
+ 
++    async def _wait_adapter_complete(self, lora_dir: str, timeout: float = 300.0) -> None:
++        """Block until the adapter safetensors under ``lora_dir`` is fully written.
++
++        LoRA "sync" here is filesystem-based: the trainer WRITES
++        ``global_step_N/actor/lora_adapter`` and this engine mmap-loads it in
++        ``add_lora``. mmap turns a mid-write/truncated file into SIGBUS, which kills the
++        engine-core child outright (uncatchable) and leaves the whole job a zombie. In
++        steady state the sync handshake orders write-before-read, but on RESUME the
++        first sync races the trainer's re-save of the step-N adapter — seen
++        as a startup SIGBUS on every resume of a WebShop LoRA run across several
++        nodes (a ~240 MB adapter takes 1-2 min to land on a shared filesystem). A safetensors file self-describes
++        its full length (8-byte header size + JSON header with data offsets), so
++        completeness can be checked exactly; require it plus a stable size across one
++        poll before handing the path to vLLM.
++        """
++        import asyncio as _asyncio
++        import json as _json
++        import os as _os
++        import struct as _struct
++        import time as _time
++
++        f = _os.path.join(lora_dir, "adapter_model.safetensors")
++        deadline = _time.time() + timeout
++        last_size = -1
++        while _time.time() < deadline:
++            try:
++                size = _os.path.getsize(f)
++                if size == last_size and size > 8:
++                    with open(f, "rb") as fh:
++                        (hlen,) = _struct.unpack("<Q", fh.read(8))
++                        if 0 < hlen < size:
++                            header = _json.loads(fh.read(hlen))
++                            data_end = max(
++                                (v["data_offsets"][1] for k, v in header.items() if k != "__metadata__"),
++                                default=0,
++                            )
++                            if 8 + hlen + data_end <= size:
++                                return
++                last_size = size
++            except (OSError, ValueError, _struct.error, _json.JSONDecodeError):
++                last_size = -1  # unreadable/partial: force another stable-size round
++            await _asyncio.sleep(2)
++        self.logger.warning(
++            f"Adapter at {lora_dir} still incomplete after {timeout}s; proceeding anyway."
++        )
++
+     async def sync_model(self, model_version: int, weight_source: str = "student") -> int:
+         """Sync model weights to vLLM."""
+         if self.enable_lora:
+@@ -534,6 +580,8 @@ class vLLMRolloutModel(BaseInferenceModel):
+             self.logger.info(
+                 f"Redirect `lora_path` from old_model_version={self.model_version} to {model_version=} successfully."
+             )
++            # Never mmap a half-written adapter (SIGBUS): wait for completeness first.
++            await self._wait_adapter_complete(self.default_lora_path)
+             lora_int_ids = await self.async_llm.list_loras()
+             for lora_id in lora_int_ids:
+                 await self.async_llm.remove_lora(lora_id)
+diff --git a/trinity/common/workflows/__init__.py b/trinity/common/workflows/__init__.py
+index c505f77..e7899b4 100644
+--- a/trinity/common/workflows/__init__.py
++++ b/trinity/common/workflows/__init__.py
+@@ -56,12 +56,14 @@ WORKFLOWS: Registry = Registry(
+         # custom workflows
+         "sudoku_workflow": "trinity.common.workflows.envs.sudoku.sudoku_workflow.SudokuWorkflow",
+         "OPD_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.OPD_workflow.OnPolicyDistillVerlAgentAlfworldWorkflow",
++        "DTDD_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.DTDD_workflow.DTDD_alfworld_workflow",
+         "TCOD_f2b_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.TCOD_f2b_workflow.TCOD_f2b_alfworld_workflow",
+         "TCOD_b2f_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.TCOD_b2f_workflow.TCOD_b2f_alfworld_workflow",
+         "OPD_scienceworld_workflow": "trinity.common.workflows.envs.TCOD.scienceworld.OPD_workflow.OnPolicyDistillVerlAgentScienceworldWorkflow",
+         "TCOD_f2b_scienceworld_workflow": "trinity.common.workflows.envs.TCOD.scienceworld.TCOD_f2b_workflow.TCOD_f2b_scienceworld_workflow",
+         "TCOD_b2f_scienceworld_workflow": "trinity.common.workflows.envs.TCOD.scienceworld.TCOD_b2f_workflow.TCOD_b2f_scienceworld_workflow",
+         "OPD_webshop_workflow": "trinity.common.workflows.envs.TCOD.webshop.OPD_workflow.OnPolicyDistillVerlAgentWebshopWorkflow",
++        "DTDD_webshop_workflow": "trinity.common.workflows.envs.TCOD.webshop.DTDD_workflow.DTDD_webshop_workflow",
+         "TCOD_f2b_webshop_workflow": "trinity.common.workflows.envs.TCOD.webshop.TCOD_f2b_workflow.TCOD_f2b_webshop_workflow",
+         "TCOD_b2f_webshop_workflow": "trinity.common.workflows.envs.TCOD.webshop.TCOD_b2f_workflow.TCOD_b2f_webshop_workflow",
+     },
+diff --git a/trinity/common/workflows/envs/TCOD/webshop/OPD_workflow.py b/trinity/common/workflows/envs/TCOD/webshop/OPD_workflow.py
+index 25cee74..848487c 100644
+--- a/trinity/common/workflows/envs/TCOD/webshop/OPD_workflow.py
++++ b/trinity/common/workflows/envs/TCOD/webshop/OPD_workflow.py
+@@ -199,5 +199,7 @@ class OnPolicyDistillVerlAgentWebshopWorkflow(Workflow):
+             last_response.metrics["env_done"] = 1.0 if self._env_done else 0.0
+             last_response.metrics["kl_divergence"] = trajectory_kl_divergence
+             last_response.metrics["session_id"] = float(session_id)
++            last_response.metrics["score"] = float(self._final_reward)
++            last_response.metrics["success"] = 1.0 if self._final_reward >= 0.999 else 0.0
+ 
+         return turn_responses
+diff --git a/trinity/explorer/explorer.py b/trinity/explorer/explorer.py
+index 1492393..a6e8c01 100644
+--- a/trinity/explorer/explorer.py
++++ b/trinity/explorer/explorer.py
+@@ -330,7 +330,18 @@ class Explorer:
+             no_wait=(self.config.synchronizer.sync_style != SyncStyle.FIXED),
+         )
+         if new_version > self.model_version:
+-            if self.model_version != -1:
++            # `self.model_version == -1` means this is the first sync of the process.
++            # On a FRESH run that also implies new_version == 0 and the engine already
++            # holds those weights, so pushing them is pointless -- hence the original
++            # guard. On a RESUME the engine still holds step-0 weights while the trainer
++            # is at step N > 0, and skipping the push leaves the rollout engine at
++            # model_version=0 forever: every experience is tagged 0, the trainer's
++            # staleness filter (min_model_version = step - max_staleness) discards the
++            # whole batch, and the run dies with `Read incomplete batch (0/N)`. It also
++            # leaves `default_lora_path` pointing at the non-existent global_step_0
++            # adapter, so the explorer would sample from an untrained model. Push
++            # whenever there is a real (> 0) version to push.
++            if self.model_version != -1 or new_version > 0:
+                 self.logger.info(f"New model weights version: {new_version}")
+                 await asyncio.gather(
+                     *[model.sync_model.remote(new_version, "student") for model in self.models]
+diff --git a/trinity/utils/lora_utils.py b/trinity/utils/lora_utils.py
+index 7277eeb..dc31fc3 100644
+--- a/trinity/utils/lora_utils.py
++++ b/trinity/utils/lora_utils.py
+@@ -1,3 +1,4 @@
++import os
+ from typing import Optional
+ 
+ 
+@@ -13,6 +14,17 @@ def create_dummy_lora(
+     from peft import LoraConfig, TaskType, get_peft_model
+     from transformers import AutoConfig, AutoModelForCausalLM
+ 
++    # Allow redirecting the dummy adapter to node-local storage.
++    # The dummy is a ~240 MB file rewritten at every startup and mmap-loaded by the
++    # vLLM engine minutes later. On GPFS that page-in intermittently dies with SIGBUS
++    # (repeated startup crashes in add_lora -> from_local_checkpoint; the file
++    # verifies fine afterwards, and neither node exclusion nor staggered starts
++    # helped). The dummy is throwaway state only this node's engine ever reads, so it
++    # has no business living on the shared fs. Set TRINITY_DUMMY_LORA_DIR to a
++    # node-local path (e.g. the job's /tmp) to opt in; default behaviour unchanged.
++    checkpoint_job_dir = os.environ.get("TRINITY_DUMMY_LORA_DIR") or checkpoint_job_dir
++    os.makedirs(checkpoint_job_dir, exist_ok=True)
++
+     config = AutoConfig.from_pretrained(model_path)
+     model = AutoModelForCausalLM.from_config(config)
+     lora_config = {
