@@ -26,3 +26,11 @@ tools/autoeval_arms.json
 /agent_ckpts/
 /agent_buffers/
 /hf_cache/
+
+# Code lane: run state and derived data, all regenerable, never committed.
+/checkpoint/
+/wandb_logs/
+/sandbox-fusion.sif
+/sandbox_base_patched.py
+/sandbox_endpoint*.txt
+/lcb_raw/

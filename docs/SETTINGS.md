@@ -70,3 +70,88 @@ teacher scores 18.7% success on the held-out goals, *below* the OPD student's
 19.7% at update 200 — the "invalid teacher" boundary case. Score the teacher
 yourself with `scripts/eval/run_bench_agentic.sbatch` (`STEPS=0`,
 `STUDENT_MODEL=<teacher>`) before drawing any conclusion from a WebShop arm.
+
+## Code settings (LiveCodeBench)
+
+The code lane trains a tool-using coding agent: every response is executed
+against test cases in a SandboxFusion instance, and that pass rate is the
+reward. It shares the trigger, the takeover and the loss with the other
+lanes, but rides on a different base (`YoungZ365/SOD`, itself a fork of
+verl) and a different environment; see
+`recipe_dtdd_code/overlay/PATCH_NOTES.md`.
+
+All code settings share: student Qwen3-1.7B-SFT ← teacher
+`SOD-GRPO_teacher-4B` (the SOD release), the code-only slice of
+Open-AgentRL-30K (4,205 problems, grading tests subsampled to ≤12), up to 8
+tool-calling turns, 12,288 response tokens, batch 64 × 8 samples,
+`token-mean` aggregation, lr 1e-6, about 66 optimizer steps per epoch
+(4,205 problems / batch 64) and 2 epochs, so the arms run to step 131;
+checkpoints and validation every 10 steps. Rollouts are student-only at
+evaluation time. 4 GPUs: student on two (TP=2, utilisation 0.45), the frozen
+teacher pool on the other two (dp=2, TP=1, utilisation 0.8) via
+`DTDD_TEACHER_GPU_OFFSET=2`.
+
+| setting | τ / trigger | ε random | steps | how to launch |
+|---|---|---|---|---|
+| DTDD (paper Table, code block) | **0.50** rewind | 0.2 | 131 (2 epochs) | `ARM=dtdd sbatch scripts/train/run_dtdd_code.sbatch` |
+| DTDD high dose | **0.26** rewind | 0.2 | 131 | `ARM=dtdd DTDD_TAU=0.26 EXPERIMENT_NAME=... sbatch ...` |
+| OPD baseline (matched) | 999 — never fires | 0 | 131 | `ARM=opd sbatch scripts/train/run_dtdd_code.sbatch` |
+
+**The baseline is the same binary.** It keeps `dtdd.enable=true` and sets the
+threshold out of reach, so the two arms share the rollout path, the teacher
+engine, the reference logprobs and the loss code exactly; the only
+difference is whether the trigger ever fires. `STEPWISE_ENABLE=False` on
+both arms is the other half: the step-wise `w_k` weighting is SOD's
+contribution, not vanilla OPD, so turning it off makes "OPD" mean the same
+thing here as in the math and agentic lanes.
+
+**Why τ differs from the other lanes.** τ is a threshold on a mean absolute
+log-prob gap per turn, and its scale depends on what a turn contains. A code
+turn is a long block of program text plus a tool call; the math lane's
+reasoning steps and ALFWorld's short imperative actions sit at different
+scales, so the numbers are not comparable across lanes. 0.50 is roughly the
+75th percentile of the divergence measured on a vanilla-OPD run
+(`scripts/calibrate_tau.py` in the SOD base reports that distribution);
+0.26 is the deliberate over-dose, and it is the arm that comes out negative.
+
+**Evaluation.** `scripts/eval/run_eval_code.sbatch` scores saved checkpoints
+on four sets in one pass: the 200 held-out training-distribution problems
+with subsampled tests, the same 200 with their full suites, LiveCodeBench v1
+(219 problems, 2023-05..2024-03) and v6 (112 problems, 2025-01..2025-04).
+Reading accuracy off this fixed harness rather than off the training curves
+is deliberate: the runs log a partial-credit `score`, not `acc`, and the two
+correlate at r = 0.30.
+
+**The LiveCodeBench files are rebuilt, not the shipped ones.** The parquet
+in `Open-AgentRL-Eval` grades each problem on the single test case it also
+prints into the prompt, so echoing the shown output scores 1.0. Build the
+split versions with `recipe_dtdd_code/data/build_lcb_fixed.py` before
+drawing any conclusion from a LiveCodeBench number.
+
+**Sandbox.** One SandboxFusion instance per training job
+(`scripts/sandbox/`). A single shared instance serving several concurrent
+trainings is both a single point of failure and the overload pattern that
+produces sick-but-alive 503s; the launchers start a dedicated one and cancel
+it on exit. If you cancel a training job by hand, cancel its
+`sandbox_<jobid>` companion too — it does not exit on its own.
+
+**Three settings that are not free parameters.**
+
+* **The teacher needs its own GPUs** (`DTDD_TEACHER_GPU_OFFSET=2`). Sharing
+  devices with the student has no working operating point: a low teacher
+  utilisation starves its KV cache, until scoring is nearly all of a step; a
+  high one makes the student's engine fail to re-map its memory on wake.
+* **`ppo_max_token_len_per_gpu=8192`, not prompt + response.** The vocabulary
+  logits gradient in the update's backward pass is the peak allocation of the
+  whole step, and the full-length value overflows a 48 GB card. This is legal
+  because the value times the sequence-parallel degree still exceeds the
+  longest sequence.
+* **Never set `PYTORCH_CUDA_ALLOC_CONF=expandable_segments`.** It conflicts
+  with the vLLM weight sync, and the first synchronisation hangs with no
+  error.
+
+**Resuming.** Checkpoints resume automatically
+(`trainer.resume_mode=auto`): after a timeout or preemption, resubmit the
+same command. Chain with `--dependency=afterany` rather than retrying inside
+one allocation — an in-job retry reuses the allocation, where a crashed
+engine still holds its memory and the student cannot allocate a KV cache.

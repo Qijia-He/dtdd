@@ -9,20 +9,23 @@
 #   math lane     thunlp/OPD@4532fd3      -> third_party/OPD, linked as verl/
 #   agentic lane  kokolerk/TCOD@465eef4   -> third_party/TCOD  (ALFWorld, WebShop)
 #                 princeton-nlp/WebShop@64fa2a5 -> third_party/WebShop
+#   code lane     YoungZ365/SOD@110c4b8   -> third_party/SOD   (LiveCodeBench)
 #
 #   ./setup.sh                 # math lane only (the default)
 #   ./setup.sh --agentic       # math + agentic lanes
+#   ./setup.sh --code          # math + code lanes
 #   ./setup.sh --force ...     # re-clone from scratch first
 #
 # Idempotent: safe to re-run. Everything it creates is git-ignored.
 set -euo pipefail
 
 ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-FORCE=0; AGENTIC=0
+FORCE=0; AGENTIC=0; CODE=0
 for arg in "$@"; do
     case "$arg" in
         --force)   FORCE=1 ;;
         --agentic) AGENTIC=1 ;;
+        --code)    CODE=1 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
 done
@@ -152,6 +155,37 @@ if [ "$AGENTIC" = 1 ]; then
     probe third_party/WebShop/web_agent_site/utils.py items_shuffle_120000
 fi
 
+# ---------------------------------------------------------------- code lane
+if [ "$CODE" = 1 ]; then
+    CD=$ROOT/recipe_dtdd_code
+    SOD=$ROOT/third_party/SOD
+
+    fetch_pinned "${SOD_URL:-https://github.com/YoungZ365/SOD.git}" \
+                 "${SOD_PIN:-110c4b8}" "$SOD" \
+                 "reward.py map_lcb, ray_trainer stepwise metrics, and four robustness fixes"
+    apply_overlay "$SOD" "$CD/overlay/sod_overlay.patch"
+
+    # The DTDD recipe is the method; it is installed as new files into the
+    # base checkout, where recipe.dtdd.* is importable and the hydra config
+    # search path (file://verl/trainer/config) resolves.
+    mkdir -p "$SOD/recipe/dtdd/config"
+    for f in __init__.py main_dtdd.py dtdd_agent_loop.py dtdd_ray_trainer.py \
+             dtdd_dp_actor.py dtdd_fsdp_workers.py teacher_vllm_server.py \
+             run_dtdd_code.sh config/agent_loop.yaml config/dtdd_trainer.yaml; do
+        src=$CD/recipe/dtdd/$f
+        dst=$SOD/recipe/dtdd/$f
+        if ! cmp -s "$src" "$dst" 2>/dev/null; then
+            cp "$src" "$dst"
+            echo "== installed recipe/dtdd/$f"
+        fi
+    done
+
+    probe third_party/SOD/recipe/demystify/reward.py public_tests
+    probe third_party/SOD/verl/trainer/ppo/ray_trainer.py stepwise_summary
+    probe third_party/SOD/verl/trainer/constants_ppo.py TORCHINDUCTOR_CACHE_DIR
+    probe third_party/SOD/recipe/dtdd/dtdd_agent_loop.py DTDDToolAgentLoop
+fi
+
 # ------------------------------------------------------------------ summary
 cat <<EOF
 
@@ -164,6 +198,11 @@ if [ "$AGENTIC" = 1 ]; then
 cat <<EOF
   third_party/TCOD     $(git -C "$ROOT/third_party/TCOD" rev-parse --short HEAD) + tcod_overlay.patch + DTDD workflows
   third_party/WebShop  $(git -C "$ROOT/third_party/WebShop" rev-parse --short HEAD) + webshop_catalog.patch
+EOF
+fi
+if [ "$CODE" = 1 ]; then
+cat <<EOF
+  third_party/SOD      $(git -C "$ROOT/third_party/SOD" rev-parse --short HEAD) + sod_overlay.patch + recipe/dtdd
 EOF
 fi
 cat <<EOF
@@ -184,5 +223,14 @@ cat <<EOF
      WebShop:  see README "WebShop data" (catalog, search index, task lists)
   7. ENV=alfworld CONFIG=recipe_dtdd_agentic/configs/alfworld/dtdd_lora.yaml \\
        sbatch scripts/train/run_dtdd_agentic.sbatch
+EOF
+fi
+if [ "$CODE" = 1 ]; then
+cat <<EOF
+  code lane, additionally:
+  5. scripts/env/make_code_env.sh                # once; then export CODE_ENV
+  6. build the datasets and the sandbox image (see README "Code data",
+     "Sandbox"); export SANDBOX_SIF
+  7. ARM=dtdd sbatch scripts/train/run_dtdd_code.sbatch   # or ARM=opd
 EOF
 fi

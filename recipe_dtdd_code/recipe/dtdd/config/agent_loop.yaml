@@ -1,0 +1,5 @@
+# Overrides the built-in "tool_agent" registry entry: every sample whose
+# agent_name is tool_agent runs the DTDD loop instead. With dtdd.enable=false,
+# or on validation samples, it behaves exactly like the stock ToolAgentLoop.
+- name: tool_agent
+  _target_: recipe.dtdd.dtdd_agent_loop.DTDDToolAgentLoop

@@ -95,6 +95,22 @@ Then the environment data — see [ALFWorld data](#alfworld-data) and
 `models/` like the math lane's (`Qwen2.5-3B-Instruct`, and the GiGPO-7B
 teachers `GiGPO-Qwen2.5-7B-Instruct-ALFWorld` / `-WebShop` from their release).
 
+**5. Code lane (optional).** LiveCodeBench runs on a third base
+(`YoungZ365/SOD`, a verl fork) and needs its own Python environment: the SOD
+base pins `vllm<=0.9.1`, older than the container image's stack, so the two
+cannot share an interpreter.
+
+```bash
+./setup.sh --code                        # + YoungZ365/SOD@110c4b8, patched
+scripts/env/make_code_env.sh /path/to/code_env   # once; needs conda
+export CODE_ENV=/path/to/code_env
+```
+
+Then the datasets — see [Code data](#code-data) — and a code-execution
+sandbox, see [Sandbox](#sandbox). Student and teacher checkpoints go under
+`models/` like the other lanes' (`Qwen3-1.7B-SFT`, and `SOD-GRPO_teacher-4B`
+from the SOD release).
+
 ---
 
 ## Quickstart
@@ -145,6 +161,21 @@ ENV=alfworld ARM=dtdd_lora_alfworld STEPS="200 400" \
 `tools/harvest.py` reads the resulting `benchmark.log` files into the same
 results store as the math lane.
 
+**Code.** One arm per job; the DTDD and OPD arms are the same binary with a
+different trigger threshold (see [docs/SETTINGS.md](docs/SETTINGS.md)):
+
+```bash
+ARM=dtdd sbatch scripts/train/run_dtdd_code.sbatch      # tau = 0.50
+ARM=opd  sbatch scripts/train/run_dtdd_code.sbatch      # the matched baseline
+
+# score saved checkpoints on the held-out and LiveCodeBench sets
+ARM=qwen3_1p7b_code_dtdd STEPS="60 90 120 131" \
+  sbatch scripts/eval/run_eval_code.sbatch
+```
+
+Both write into the same `results/eval_results.jsonl` the other lanes use,
+so `tools/harvest.py` and `tools/track.py` need no changes.
+
 ## Repo layout
 
 ```
@@ -187,6 +218,23 @@ recipe_dtdd_agentic/     ── the method, agentic lanes ──
   tests/                   test_smoke.py: import, registry, config validation
 scripts/train/run_dtdd_agentic.sbatch    scripts/eval/run_bench_agentic.sbatch
 scripts/env/make_agentic_venv.sh         requirements-lock-agentic.txt
+recipe_dtdd_code/        ── the method, code lane ──
+  recipe/dtdd/             DTDD for the SOD base: agent loop (trigger and
+                           takeover), trainer (teacher pool, loss masks),
+                           actor (prefix PPO + suffix SFT), teacher server,
+                           entry point, and run_dtdd_code.sh (the paper's
+                           override bundle). Copied into third_party/SOD by
+                           setup.sh
+  overlay/                 sod_overlay.patch + PATCH_NOTES.md (an evaluation
+                           fix, a metrics fix, four robustness fixes -- not
+                           the method); sandbox_runner_stdin.patch for the
+                           SandboxFusion image
+  data/                    build_code_slices.py, build_lcb_fixed.py, and
+                           heldout200_indices.json (the exact held-out split)
+  tests/                   test_smoke.py: imports, registry, config, data
+scripts/train/run_dtdd_code.sbatch      scripts/eval/run_eval_code.sbatch
+scripts/sandbox/                        scripts/env/make_code_env.sh
+requirements-lock-code.txt
 ```
 
 ---
@@ -314,6 +362,28 @@ The pins that actually matter, in rough order of risk: `vllm==0.11.0`,
 `ray==2.49.2`, `tensordict==0.10.0`. Then strip the `apptainer exec` wrappers
 from the sbatch scripts.
 
+### Code lane
+
+Its own environment, not the container. The SOD base pins `vllm<=0.9.1` and
+`tensordict<=0.9.1`; the image carries vLLM 0.11 and torch 2.8, so they
+cannot share an interpreter. `scripts/env/make_code_env.sh` builds a conda
+environment from the pins below and installs the patched SOD checkout into
+it as an editable package.
+
+| | |
+|---|---|
+| Interpreter | conda, Python 3.11 |
+| Key pins | torch 2.6.0+cu124 · vLLM 0.8.5.post1 · ray 2.47.1 · transformers 5.12.1 · flash-attn 2.7.4.post1 · numpy 1.26.4 (the base requires numpy<2) |
+| Full freeze | [`requirements-lock-code.txt`](requirements-lock-code.txt) |
+| Editable | `verl` → `third_party/SOD` (the patched checkout is what gets imported) |
+| Also needed | a SandboxFusion server image, see [Sandbox](#sandbox) |
+
+Two wheels are not on PyPI for this torch and CUDA combination —
+`flash_attn 2.7.4.post1` and the optional `flashinfer-python 0.2.2.post1` —
+and the script fetches them from the projects' release pages. Keep the tags
+exactly: a wheel built against a different torch imports fine and then
+segfaults.
+
 ---
 
 ## ALFWorld data
@@ -368,6 +438,68 @@ Step 2 refuses to run if fewer than a million products load — the symptom of
 the paths still resolving to a capped subset. The held-out ids are shipped
 verbatim (`recipe_dtdd_agentic/data/webshop_test_ids.json`) rather than as a
 seed, so the split is exact.
+
+## Code data
+
+Three builds, all from public sources:
+
+```bash
+# 1. the training slice and the 200-problem held-out split
+$CODE_ENV/bin/python recipe_dtdd_code/data/build_code_slices.py \
+    --source <Open-AgentRL-30K.parquet> \
+    --indices recipe_dtdd_code/data/heldout200_indices.json \
+    --output-dir datasets/code
+
+# 2. the LiveCodeBench evaluation files, one release at a time
+for spec in "test.jsonl v1" "test6.jsonl v6"; do
+  set -- $spec
+  $CODE_ENV/bin/python recipe_dtdd_code/data/build_lcb_fixed.py \
+      --release "$1" --data-source "LiveCodeBench_$2_fixed" \
+      --output "datasets/code/lcb_$2_fixed.parquet"
+done
+```
+
+The training slice keeps every `train-code-*` row of Open-AgentRL-30K (4,205
+problems) and subsamples each one's grading tests to at most 12. Code-only
+training sends every response to the sandbox, a cost the 30K mix hid because
+89% of its rows have a string-match reward; capping the tests in the data
+leaves the reward code, which evaluation shares, at full fidelity. The
+held-out split ships as the exact 200 row indices rather than a seed.
+
+The LiveCodeBench files are rebuilt for a reason: the parquet in
+`Open-AgentRL-Eval` carries one test case per problem and uses it both as
+the worked example in the prompt and as the grading truth, so a program that
+echoes the shown output scores 1.0. The rebuilt files keep `public_tests`
+(prompt only) and `reward_model` (grading, private cases first) apart. The
+raw releases are downloaded from `livecodebench/code_generation_lite`; some
+are over a gigabyte and a few problems unpickle into gigabytes, so run this
+on a machine with real memory, one release at a time.
+
+## Sandbox
+
+Code rewards come from actually running the model's programs, which needs a
+[SandboxFusion](https://github.com/bytedance/SandboxFusion) server. Pull the
+image once, prepare the patched runner, and the launchers do the rest:
+
+```bash
+apptainer pull sandbox-fusion.sif \
+  docker://volcengine/sandbox-fusion:server-20250609
+export SANDBOX_SIF=$PWD/sandbox-fusion.sif
+
+# the image's own runner, with the stdin guard applied
+apptainer exec "$SANDBOX_SIF" cat /root/sandbox/sandbox/runners/base.py \
+  > sandbox_base_patched.py
+patch sandbox_base_patched.py \
+  recipe_dtdd_code/overlay/sandbox_runner_stdin.patch
+```
+
+`scripts/sandbox/acquire_sandbox.sh`, sourced by both code-lane launchers,
+starts one instance per job and cancels it on exit. Set `SANDBOX_FUSION_URL`
+to reuse an existing endpoint instead; it is health-checked before use.
+
+The patch matters: the published image crashes when it kills a timed-out
+process, and afterwards answers health checks while every execution fails.
+`recipe_dtdd_code/overlay/PATCH_NOTES.md` has the details.
 
 ## Acknowledgements & license
 

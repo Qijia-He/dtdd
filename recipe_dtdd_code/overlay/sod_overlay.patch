@@ -1,0 +1,279 @@
+diff -ruN pin/recipe/demystify/reward.py new/recipe/demystify/reward.py
+--- a/recipe/demystify/reward.py
++++ b/recipe/demystify/reward.py
+@@ -89,7 +89,7 @@
+                 dataframe = dataframe.map(self.map_fn2, num_proc=16)
+             elif data_source == 'gpqa_diamond':
+                 dataframe = dataframe.map(self.map_fn_gpqa,num_proc=16)
+-            elif data_source == 'LiveCodeBench_v6':
++            elif str(data_source).startswith('LiveCodeBench'):
+                 dataframe = dataframe.map(self.map_lcb,num_proc=16)
+             else:
+                 dataframe = dataframe.map(self.map_fn_skywork, num_proc=16)
+@@ -133,8 +133,23 @@
+         start_prompt = "You will be given a question (problem specification) and will generate a correct Python program that matches the specification and passes all tests.\n\n"
+         code_prompt = "\n\nRead the inputs from stdin solve the problem and write the answer to stdout (do not directly test on the sample inputs). Enclose your code within delimiters as follows. Ensure that when the python program runs, it reads the inputs, runs the algorithm and writes output to STDOUT.\n```python\n# YOUR CODE HERE\n\""
+         reward_model = json.loads(row['reward_model'])
+-        inputs = reward_model['ground_truth']['inputs']
+-        outputs = reward_model['ground_truth']['outputs']
++        # The worked example shown to the model and the set it is graded on
++        # must not be the same object. The LiveCodeBench parquet shipped with
++        # Open-AgentRL-Eval carries exactly one test case per problem (median
++        # = mean = max = 1 across all 175) and this function printed it into
++        # the prompt AND passed it through as ground_truth, so a program that
++        # ignored the question and echoed the shown output scored 1.0. The
++        # parquets built by recipe_dtdd_code/data/build_lcb_fixed.py split
++        # them: `public_tests` is prompt-only and `reward_model` holds
++        # private-first cases for grading. Fall back to the old behaviour
++        # when the column is absent, so the original files still load and
++        # their numbers stay reproducible.
++        if row.get('public_tests'):
++            shown = json.loads(row['public_tests'])
++            inputs, outputs = shown['inputs'], shown['outputs']
++        else:
++            inputs = reward_model['ground_truth']['inputs']
++            outputs = reward_model['ground_truth']['outputs']
+         public_examples = "\nHere are some input and output examples of the expected code:\nInput:" + str(inputs) +"\nOutput:\n" + str(outputs)
+         prompt = start_prompt + problem +  public_examples + agent_prompt + code_prompt +"\nBefore sumbit your code, you can utilize tools to check the correctness of your code, once you make sure the current code is correct, do not call the tools again and submit your code within ```python\n# YOUR CODE HERE\n```."
+         data = {
+diff -ruN pin/recipe/demystify/sandbox_fusion_tool_config.yaml new/recipe/demystify/sandbox_fusion_tool_config.yaml
+--- a/recipe/demystify/sandbox_fusion_tool_config.yaml
++++ b/recipe/demystify/sandbox_fusion_tool_config.yaml
+@@ -1,11 +1,18 @@
+ tools:
+   - class_name: "recipe.demystify.reward.CustomSandboxFusionTool"
+     config:
+-      sandbox_fusion_url: "<your_sandbox_fusion_url>"
+-      num_workers: 32
++      sandbox_fusion_url: "${oc.env:SANDBOX_FUSION_URL,http://localhost:8080/run_code}"
++      # Was 32, the upstream default, which the SOD authors confirmed
++      # overwhelms a locally deployed sandbox under real concurrency. Set
++      # this to the CPU count of the sandbox instance serving the job
++      # (scripts/sandbox/start_server.sbatch allocates 16) so client-side
++      # concurrency cannot outrun the server on its own.
++      num_workers: 16
+       enable_global_rate_limit: true
+-      rate_limit: 128 
+-      default_timeout: 60
++      rate_limit: 128
++      # 10 s, down from 60. Training-time tool calls are short scripts; a
++      # 60 s ceiling let a handful of runaway executions hold every worker.
++      default_timeout: 10
+       default_language: "python"
+       memory_limit_mb: 2048
+       type: native
+diff -ruN pin/verl/model_merger/base_model_merger.py new/verl/model_merger/base_model_merger.py
+--- a/verl/model_merger/base_model_merger.py
++++ b/verl/model_merger/base_model_merger.py
+@@ -20,13 +20,20 @@
+ 
+ import torch
+ from accelerate import init_empty_weights
++from packaging import version
+ from transformers import (
+     AutoConfig,
+     AutoModelForCausalLM,
+     AutoModelForTokenClassification,
+-    AutoModelForVision2Seq,
+     GenerationConfig,
+ )
++from transformers import __version__ as transformers_version
++
++if version.parse(transformers_version) >= version.parse("4.54.0"):
++    # transformers >= 4.54.0 renamed AutoModelForVision2Seq to AutoModelForImageTextToText
++    from transformers import AutoModelForImageTextToText as AutoModelForVision2Seq
++else:
++    from transformers import AutoModelForVision2Seq
+ 
+ from verl.utils import hf_processor, hf_tokenizer
+ 
+diff -ruN pin/verl/trainer/constants_ppo.py new/verl/trainer/constants_ppo.py
+--- a/verl/trainer/constants_ppo.py
++++ b/verl/trainer/constants_ppo.py
+@@ -44,4 +44,21 @@
+     for key in list(runtime_env["env_vars"].keys()):
+         if os.environ.get(key) is not None:
+             runtime_env["env_vars"].pop(key, None)
++
++    # Force these through explicitly, bypassing the pop-if-already-set
++    # filter above: plain environment inheritance into Ray WorkerDict actors
++    # is not reliable for them, and letting Triton and Inductor fall back to
++    # their defaults under the home directory caused a silent, job-wide hang
++    # -- every rank hit "OSError: [Errno 122] Disk quota exceeded" while
++    # compiling a kernel once that filesystem was full, with no crash and no
++    # exit. Defaulting to node-local storage keeps a full or quota-bound home
++    # directory from repeating it.
++    user = os.environ.get("USER", "user")
++    runtime_env["env_vars"]["TRITON_CACHE_DIR"] = os.environ.get("TRITON_CACHE_DIR", f"/tmp/{user}/triton_cache")
++    runtime_env["env_vars"]["TORCHINDUCTOR_CACHE_DIR"] = os.environ.get(
++        "TORCHINDUCTOR_CACHE_DIR", f"/tmp/{user}/inductor_cache"
++    )
++    # Same class of bug: vLLM's cache also defaults under the home
++    # directory, and grows to several gigabytes.
++    runtime_env["env_vars"]["VLLM_CACHE_ROOT"] = os.environ.get("VLLM_CACHE_ROOT", f"/tmp/{user}/vllm_cache")
+     return runtime_env
+diff -ruN pin/verl/trainer/ppo/ray_trainer.py new/verl/trainer/ppo/ray_trainer.py
+--- a/verl/trainer/ppo/ray_trainer.py
++++ b/verl/trainer/ppo/ray_trainer.py
+@@ -869,12 +869,21 @@
+             all_n_steps = [info["n_steps"] for info in log_info]
+             all_d1 = [info["d_values"][0] for info in log_info if info["n_steps"] > 0]
+             all_w_last = [info["w_values"][-1] for info in log_info if info["n_steps"] > 0]
++            all_w_all = [w for info in log_info for w in info["w_values"]]
+             f.write(f"  Summary: {len(log_info)} samples | "
+                     f"avg_steps={sum(all_n_steps)/max(len(all_n_steps),1):.2f} | "
+                     f"avg_d1={sum(all_d1)/max(len(all_d1),1):.6f} | "
+                     f"avg_w_last={sum(all_w_last)/max(len(all_w_last),1):.6f}\n")
+             f.write("\n\n")
+ 
++        return {
++            "opd/avg_steps": sum(all_n_steps) / max(len(all_n_steps), 1),
++            "opd/avg_d1": sum(all_d1) / max(len(all_d1), 1),
++            "opd/stepwise_weight_mean": sum(all_w_all) / max(len(all_w_all), 1),
++            "opd/stepwise_weight_min": min(all_w_all) if all_w_all else 0.0,
++            "opd/stepwise_weight_max": max(all_w_all) if all_w_all else 0.0,
++        }
++
+     def _apply_token_kl_regularizer(self, batch: DataProto, cfg) -> DataProto:
+         if cfg is None or not getattr(cfg, "enable", False):
+             return batch
+@@ -907,7 +916,7 @@
+             stepwise_weights = stepwise_weights.to(raw_local_adv.device)
+ 
+             # ---- Write step-wise weights log ----
+-            self._write_stepwise_log(stepwise_log_info, epsilon, delta, opd_coef)
++            stepwise_summary = self._write_stepwise_log(stepwise_log_info, epsilon, delta, opd_coef)
+ 
+             # Weighted OPD signal: w_k * (ref_log_prob - old_log_probs) per token
+             weighted_opd = opd_coef * stepwise_weights * raw_local_adv
+@@ -925,6 +934,7 @@
+                 {
+                     "stepwise_weights": stepwise_weights.detach().clone(),
+                     "local_adv": raw_local_adv.detach().clone(),
++                    "stepwise_summary": stepwise_summary,
+                 }
+             )
+         else:
+@@ -1622,6 +1632,9 @@
+                         token_kl_cfg = getattr(self.config.algorithm, "token_kl_reg", None)
+                         if token_kl_cfg and getattr(token_kl_cfg, "enable", False):
+                             batch = self._apply_token_kl_regularizer(batch, token_kl_cfg)
++                            stepwise_summary = batch.meta_info.get("token_kl_reg", {}).get("stepwise_summary")
++                            if stepwise_summary:
++                                metrics.update(stepwise_summary)
+ 
+                     # update critic
+                     if self.use_critic:
+@@ -1719,7 +1732,7 @@
+                 metrics.update(
+                     {
+                         "training/global_step": self.global_steps,
+-                        "training/epoch": epoch,
++                        "training/epoch": epoch + (self.global_steps + 1) / len(self.train_dataloader),
+                     }
+                 )
+                 # collect metrics
+diff -ruN pin/verl/utils/checkpoint/fsdp_checkpoint_manager.py new/verl/utils/checkpoint/fsdp_checkpoint_manager.py
+--- a/verl/utils/checkpoint/fsdp_checkpoint_manager.py
++++ b/verl/utils/checkpoint/fsdp_checkpoint_manager.py
+@@ -141,10 +141,22 @@
+ 
+             if self.should_load_optimizer:
+                 remote_optim_path = os.path.join(local_path, f"optim_world_size_{self.world_size}_rank_{self.rank}.pt")
+-                local_optim_path = copy_to_local(remote_optim_path)
+-                optimizer_state_dict = torch.load(local_optim_path, weights_only=False)
+-                self.optimizer.load_state_dict(optimizer_state_dict)
+-                log_with_rank(f"Loaded optimizer from {remote_optim_path}", rank=self.rank, logger=logger)
++                if not os.path.exists(remote_optim_path):
++                    # Long runs on quota-bound filesystems prune optimizer
++                    # shards from intermediate checkpoints to save space. A
++                    # missing optimizer is survivable: resume from the model
++                    # weights with fresh Adam state, which costs a brief
++                    # warmup transient, rather than refusing to resume.
++                    log_with_rank(
++                        f"WARNING: optimizer shard missing at {remote_optim_path}; "
++                        f"resuming with FRESH optimizer state",
++                        rank=self.rank, logger=logger, log_only_rank_0=True,
++                    )
++                else:
++                    local_optim_path = copy_to_local(remote_optim_path)
++                    optimizer_state_dict = torch.load(local_optim_path, weights_only=False)
++                    self.optimizer.load_state_dict(optimizer_state_dict)
++                    log_with_rank(f"Loaded optimizer from {remote_optim_path}", rank=self.rank, logger=logger)
+ 
+         if self.should_load_extra:
+             remote_extra_state_path = os.path.join(
+diff -ruN pin/verl/utils/model.py new/verl/utils/model.py
+--- a/verl/utils/model.py
++++ b/verl/utils/model.py
+@@ -23,6 +23,7 @@
+ 
+ import numpy as np
+ import torch
++from packaging import version
+ from torch import nn
+ from transformers import (
+     AutoConfig,
+@@ -32,8 +33,15 @@
+     PretrainedConfig,
+     PreTrainedModel,
+ )
++from transformers import __version__ as transformers_version
+ from transformers.modeling_outputs import CausalLMOutputWithPast
+ 
++if version.parse(transformers_version) >= version.parse("4.54.0"):
++    # transformers >= 4.54.0 renamed AutoModelForVision2Seq to AutoModelForImageTextToText
++    from transformers import AutoModelForImageTextToText as AutoModelForVision2Seq
++else:
++    from transformers import AutoModelForVision2Seq
++
+ from verl.models.registry import ModelRegistry
+ from verl.utils.import_utils import is_trl_available
+ 
+@@ -621,7 +629,7 @@
+ 
+ 
+ def load_valuehead_model(local_path, torch_dtype, model_config, trust_remote_code):
+-    from transformers import AutoModelForCausalLM, AutoModelForTokenClassification, AutoModelForVision2Seq
++    from transformers import AutoModelForCausalLM, AutoModelForTokenClassification
+ 
+     try:
+         model = AutoModelForTokenClassification.from_pretrained(
+@@ -662,7 +670,6 @@
+     from transformers import (
+         AutoModel,
+         AutoModelForCausalLM,
+-        AutoModelForVision2Seq,
+     )
+ 
+     has_remote_code = hasattr(hf_config, "auto_map") and any(
+diff -ruN pin/verl/utils/reward_score/livecodebench/code_math.py new/verl/utils/reward_score/livecodebench/code_math.py
+--- a/verl/utils/reward_score/livecodebench/code_math.py
++++ b/verl/utils/reward_score/livecodebench/code_math.py
+@@ -30,6 +30,8 @@
+ from verl.utils.reward_score.sandbox_fusion.utils import check_correctness
+ from typing import Optional
+ 
++SANDBOX_FUSION_URL = os.environ.get("SANDBOX_FUSION_URL", "http://localhost:8080/run_code")
++
+ IMPORT_PROMPT='''from typing import *
+ 
+ from functools import *
+@@ -222,7 +224,7 @@
+                     message = None
+                     ## Add Sandbox Fusion API
+                     metrics = check_correctness(
+-                            sandbox_fusion_url="<your_sandbox_fusion_url>",
++                            sandbox_fusion_url=SANDBOX_FUSION_URL,
+                             in_outs={'inputs':["prefix"],"outputs":["prefix"]},
+                             generation=cur_solution,
+                             timeout=timeout
+@@ -288,7 +290,7 @@
+                 
+             # Add Sandbox Fusion API
+             metrics = check_correctness(
+-                sandbox_fusion_url = "<your_sandbox_fusion_url>",
++                sandbox_fusion_url = SANDBOX_FUSION_URL,
+                 in_outs=json.loads(json.dumps(test_cases)),
+                 generation=solution,
+                 timeout=timeout,
