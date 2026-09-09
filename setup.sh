@@ -119,13 +119,20 @@ if [ "$AGENTIC" = 1 ]; then
 
     # The DTDD workflows are the method; they are installed as new files at
     # the module paths the overlay registers in trinity/common/workflows.
-    for env in alfworld webshop; do
-        src=$AG/workflows/dtdd_${env}_workflow.py
-        dst=$TCOD/trinity/common/workflows/envs/TCOD/$env/DTDD_workflow.py
+    # The shared base module goes one directory up, next to the per-env
+    # packages, because both environment workflows import it from there.
+    install_workflow() {
+        local src=$1 dst=$2
         if ! cmp -s "$src" "$dst" 2>/dev/null; then
             cp "$src" "$dst"
-            echo "== installed workflows/dtdd_${env}_workflow.py -> $(realpath --relative-to="$ROOT" "$dst")"
+            echo "== installed $(basename "$src") -> $(realpath --relative-to="$ROOT" "$dst")"
         fi
+    }
+    install_workflow "$AG/workflows/dtdd_base_workflow.py" \
+                     "$TCOD/trinity/common/workflows/envs/TCOD/dtdd_base_workflow.py"
+    for env in alfworld webshop; do
+        install_workflow "$AG/workflows/dtdd_${env}_workflow.py" \
+                         "$TCOD/trinity/common/workflows/envs/TCOD/$env/DTDD_workflow.py"
     done
 
     # ALFWorld task lists ship with the base under the original author's
@@ -152,6 +159,7 @@ if [ "$AGENTIC" = 1 ]; then
     probe third_party/TCOD/trinity/buffer/utils.py "A context manager that yields a session exactly once"
     probe third_party/TCOD/trinity/common/models/vllm_model.py _wait_adapter_complete
     probe third_party/TCOD/trinity/common/workflows/__init__.py DTDD_alfworld_workflow DTDD_webshop_workflow
+    probe third_party/TCOD/trinity/common/workflows/envs/TCOD/dtdd_base_workflow.py DTDDAgenticWorkflow
     probe third_party/WebShop/web_agent_site/utils.py items_shuffle_120000
 fi
 

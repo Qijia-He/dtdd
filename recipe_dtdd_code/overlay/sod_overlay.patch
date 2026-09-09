@@ -1,3 +1,19 @@
+# Overlay patch -- a deliberate artifact, not an unfinished diff.
+#
+# This repository does not vendor its upstream bases. `setup.sh --code`
+# clones YoungZ365/SOD at pinned commit 110c4b8 and applies this patch over
+# it (18 hunks over 8 files, +98/-18), then installs the DTDD recipe as new
+# files under recipe/dtdd/. `git apply --check` passes against a clean
+# checkout of that commit.
+#
+# None of these hunks is the method: one is an evaluation-correctness fix
+# (LiveCodeBench graded each problem on the same test case it showed in the
+# prompt), one exposes OPD step-weight metrics, and the rest are robustness
+# and transformers-compatibility fixes. PATCH_NOTES.md in this directory
+# explains each hunk and why it exists.
+#
+# Text before the first "diff --git" line is ignored by git apply.
+
 diff -ruN pin/recipe/demystify/reward.py new/recipe/demystify/reward.py
 --- a/recipe/demystify/reward.py
 +++ b/recipe/demystify/reward.py

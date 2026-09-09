@@ -1,3 +1,17 @@
+# Overlay patch -- a deliberate artifact, not an unfinished diff.
+#
+# This repository does not vendor its upstream bases. `setup.sh --agentic`
+# clones kokolerk/TCOD at pinned commit 465eef4 and applies this patch over
+# it (7 files, +130/-26), then installs the DTDD workflows as new files.
+# `git apply --check` passes against a clean checkout of that commit.
+#
+# None of these hunks is the method: they are harness fixes every long run
+# needed (sqlite session retries, SIGBUS protection, resume guards, LoRA
+# adapter waits) plus two lines registering the DTDD workflow names.
+# PATCH_NOTES.md in this directory explains each hunk and why it exists.
+#
+# Text before the first "diff --git" line is ignored by git apply.
+
 diff --git a/trinity/buffer/utils.py b/trinity/buffer/utils.py
 index 689a8cc..8561c40 100644
 --- a/trinity/buffer/utils.py

@@ -53,6 +53,35 @@ LANES = [
 ]
 
 
+BASE_MODULE = "trinity.common.workflows.envs.TCOD.dtdd_base_workflow"
+BASE_CLASS = "DTDDAgenticWorkflow"
+
+
+def test_base_workflow_imports() -> None:
+    """The shared DTDD turn loop is installed next to the env packages."""
+    module = importlib.import_module(BASE_MODULE)
+    assert hasattr(module, BASE_CLASS), f"{BASE_MODULE} lacks {BASE_CLASS}"
+
+
+@pytest.mark.parametrize(
+    "env, registry_name, module_path, class_name, config_path", LANES
+)
+def test_workflow_subclasses_base(
+    env: str,
+    registry_name: str,
+    module_path: str,
+    class_name: str,
+    config_path: str,
+) -> None:
+    """Both environment workflows share the base class's turn loop."""
+    del env, registry_name, config_path
+    base = getattr(importlib.import_module(BASE_MODULE), BASE_CLASS)
+    workflow = getattr(importlib.import_module(module_path), class_name)
+    assert issubclass(workflow, base), (
+        f"{class_name} does not extend {BASE_CLASS}"
+    )
+
+
 @pytest.mark.parametrize(
     "env, registry_name, module_path, class_name, config_path", LANES
 )

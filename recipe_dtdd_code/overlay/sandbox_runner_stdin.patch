@@ -1,3 +1,17 @@
+# Overlay patch for the SandboxFusion container image -- a deliberate
+# artifact, not an unfinished diff. It is NOT applied to the SOD base.
+#
+# The volcengine/sandbox-fusion:server-20250609 image crashes when it kills a
+# timed-out process: uvloop keeps writing to the dead child's stdin, and the
+# resulting exception storm wedges the event loop, after which the server
+# answers health checks while every execution fails. Upstream fixed this in
+# June 2025 but never published a newer image, so
+# scripts/sandbox/start_server.sbatch bind-mounts a patched copy of the
+# container's own sandbox/runners/base.py over the original. This patch is
+# that stdin write/close guard and nothing else; see PATCH_NOTES.md.
+#
+# Text before the first "diff --git" line is ignored by git apply.
+
 --- a/sandbox/runners/base.py
 +++ b/sandbox/runners/base.py
 @@ -65,8 +65,18 @@

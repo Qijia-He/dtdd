@@ -206,8 +206,10 @@ third_party/OPD/         the base @4532fd3 — verl fork, upstream runners and R
 verl               -> third_party/OPD/verl
 datasets/test_data -> third_party/OPD/scripts/val/data
 recipe_dtdd_agentic/     ── the method, agentic lanes ──
-  workflows/               DTDD workflows for ALFWorld and WebShop (installed into
-                           third_party/TCOD by setup.sh; the takeover logic lives here)
+  workflows/               dtdd_base_workflow.py holds the takeover logic; the
+                           ALFWorld and WebShop subclasses supply prompts, the action
+                           menu and episode bookkeeping (installed into
+                           third_party/TCOD by setup.sh)
   overlay/                 tcod_overlay.patch + PATCH_NOTES.md (harness fixes, not the
                            method); webshop_catalog.patch (120k catalog defaults)
   configs/                 the eight paper arms as __TOKEN__ templates, rendered by the
