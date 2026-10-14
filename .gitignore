@@ -18,16 +18,14 @@ __pycache__/
 .jid*
 *.jids
 # eval artifacts
-scripts/eval/justrl_eval_outputs/
-# user-local autoeval config
-tools/autoeval_arms.json
-# Agentic lane: run state written by trinity, all regenerable, never committed.
+/math/eval/outputs/
+# ALFWorld: run state written by trinity, all regenerable, never committed.
 # Root-anchored like the entries above, for the same reason.
 /agent_ckpts/
 /agent_buffers/
 /hf_cache/
 
-# Code lane: run state and derived data, all regenerable, never committed.
+# Coding: run state and derived data, all regenerable, never committed.
 /checkpoint/
 /wandb_logs/
 /sandbox-fusion.sif

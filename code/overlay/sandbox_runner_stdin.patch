@@ -1,0 +1,37 @@
+# Overlay patch for the SandboxFusion container image -- a deliberate
+# artifact, not an unfinished diff. It is NOT applied to the SOD base.
+#
+# The volcengine/sandbox-fusion:server-20250609 image crashes when it kills a
+# timed-out process: uvloop keeps writing to the dead child's stdin, and the
+# resulting exception storm wedges the event loop, after which the server
+# answers health checks while every execution fails. Upstream fixed this in
+# June 2025 but never published a newer image, so
+# code/sandbox/start_server.sbatch bind-mounts a patched copy of the
+# container's own sandbox/runners/base.py over the original. This patch is
+# that stdin write/close guard and nothing else; see PATCH_NOTES.md.
+#
+# Text before the first "diff --git" line is ignored by git apply.
+
+--- a/sandbox/runners/base.py
++++ b/sandbox/runners/base.py
+@@ -65,8 +65,18 @@
+                                                       },
+                                                       preexec_fn=preexec_fn)
+         if stdin is not None:
+-            p.stdin.write(stdin.encode())
+-        p.stdin.close()
++            try:
++                if p.stdin:
++                    p.stdin.write(stdin.encode())
++                else:
++                    logger.warning("Attempted to write to stdin, but stdin is closed.")
++            except Exception as e:
++                logger.exception(f"Failed to write to stdin: {e}")
++        if p.stdin:
++            try:
++                p.stdin.close()
++            except Exception as e:
++                logger.warning(f"Failed to close stdin: {e}")
+         start_time = time.time()
+         try:
+             await asyncio.wait_for(p.wait(), timeout=timeout)

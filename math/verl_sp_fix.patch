@@ -1,0 +1,24 @@
+diff --git a/verl/verl/workers/actor/dp_actor.py b/verl/verl/workers/actor/dp_actor.py
+index 914a761..72bcc82 100644
+--- a/verl/verl/workers/actor/dp_actor.py
++++ b/verl/verl/workers/actor/dp_actor.py
+@@ -35,7 +35,7 @@ from verl.utils.profiler import GPUMemoryLogger
+ from verl.utils.py_functional import append_to_dict
+ from verl.utils.seqlen_balancing import prepare_dynamic_batch, restore_dynamic_batch
+ from verl.utils.torch_functional import logprobs_from_logits
+-from verl.utils.ulysses import gather_outputs_and_unpad, ulysses_pad, ulysses_pad_and_slice_inputs
++from verl.utils.ulysses import gather_outputs_and_unpad, slice_input_tensor, ulysses_pad, ulysses_pad_and_slice_inputs
+ from verl.workers.actor import BasePPOActor
+ from verl.workers.config import ActorConfig
+ 
+@@ -255,6 +255,10 @@ class DataParallelPPOActor(BasePPOActor):
+                                  # 3. Select using indices
+                                  # Note: indices are from attention_mask, which aligns with how logits_rmpad represents data
+                                  topk_ids_rmpad = flat_ids[indices] # (total_nnz, k)
++                                 # Ulysses SP: the logits cover only this rank's shard of the
++                                 # padded sequence, so pad/slice the ids the same way as the inputs.
++                                 if self.use_ulysses_sp:
++                                     topk_ids_rmpad = slice_input_tensor(topk_ids_rmpad, dim=0, padding=True)
+                                  
+                                  # If 'student_top_k_ids' in batch has shape (batch, seq_len, k), then:
+                                  topk_ids = topk_ids_rmpad

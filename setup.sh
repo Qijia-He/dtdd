@@ -6,14 +6,13 @@
 # produced with, applies the small patches the lanes need, and links things
 # into place.
 #
-#   math lane     thunlp/OPD@4532fd3      -> third_party/OPD, linked as verl/
-#   agentic lane  kokolerk/TCOD@465eef4   -> third_party/TCOD  (ALFWorld, WebShop)
-#                 princeton-nlp/WebShop@64fa2a5 -> third_party/WebShop
-#   code lane     YoungZ365/SOD@110c4b8   -> third_party/SOD   (LiveCodeBench)
+#   math      thunlp/OPD@4532fd3      -> third_party/OPD, linked as verl/
+#   alfworld  kokolerk/TCOD@465eef4   -> third_party/TCOD
+#   code      YoungZ365/SOD@110c4b8   -> third_party/SOD   (LiveCodeBench)
 #
-#   ./setup.sh                 # math lane only (the default)
-#   ./setup.sh --agentic       # math + agentic lanes
-#   ./setup.sh --code          # math + code lanes
+#   ./setup.sh                 # math only (the default)
+#   ./setup.sh --alfworld      # math + ALFWorld
+#   ./setup.sh --code          # math + coding
 #   ./setup.sh --force ...     # re-clone from scratch first
 #
 # Idempotent: safe to re-run. Everything it creates is git-ignored.
@@ -24,7 +23,7 @@ FORCE=0; AGENTIC=0; CODE=0
 for arg in "$@"; do
     case "$arg" in
         --force)   FORCE=1 ;;
-        --agentic) AGENTIC=1 ;;
+        --alfworld|--agentic) AGENTIC=1 ;;
         --code)    CODE=1 ;;
         *) echo "unknown option: $arg" >&2; exit 2 ;;
     esac
@@ -90,8 +89,8 @@ fetch_pinned "${UPSTREAM_URL:-https://github.com/thunlp/OPD.git}" \
              "${UPSTREAM_PIN:-4532fd3}" "$ROOT/third_party/OPD" \
              "rm_wg.compute_rm_score and compute_distillation_reward"
 
-# recipe_dtdd/main_dtdd.py resolves the hydra config dir as ../verl/verl/trainer/config,
-# and the launchers put ${OPD_ROOT}/verl on PYTHONPATH, so verl must sit at the repo root.
+# math/main_dtdd.py resolves the hydra config dir as ../verl/verl/trainer/config,
+# and the launchers put ${DTDD_ROOT}/verl on PYTHONPATH, so verl must sit at the repo root.
 ln -sfn third_party/OPD/verl "$ROOT/verl"
 
 # The training runners read validation parquets from datasets/test_data, and the
@@ -103,24 +102,27 @@ if [ ! -e "$ROOT/datasets/test_data" ]; then
     echo "== linked datasets/test_data -> third_party/OPD/scripts/val/data"
 fi
 
+# One small fix to the base: under Ulysses sequence parallelism the student's
+# top-k ids must be sliced like the inputs (only needed when the update pass
+# uses sequence parallelism, e.g. on 44 GB cards; a no-op otherwise).
+apply_overlay "$ROOT/third_party/OPD" "$ROOT/math/verl_sp_fix.patch"
+
 probe verl/verl/trainer/ppo/ray_trainer.py RayPPOTrainer
 probe verl/verl/trainer/ppo/core_algos.py token_reward_direct
 
-# ------------------------------------------------------------- agentic lane
+# ---------------------------------------------------------------- ALFWorld
 if [ "$AGENTIC" = 1 ]; then
-    AG=$ROOT/recipe_dtdd_agentic
+    AG=$ROOT/alfworld
     TCOD=$ROOT/third_party/TCOD
-    WEBSHOP=$ROOT/third_party/WebShop
 
     fetch_pinned "${TCOD_URL:-https://github.com/kokolerk/TCOD.git}" \
                  "${TCOD_PIN:-465eef4}" "$TCOD" \
                  "trinity/buffer/utils.py, vllm_model.py, explorer.py and lora_utils.py"
-    apply_overlay "$TCOD" "$AG/overlay/tcod_overlay.patch"
+    apply_overlay "$TCOD" "$AG/tcod_overlay.patch"
 
-    # The DTDD workflows are the method; they are installed as new files at
-    # the module paths the overlay registers in trinity/common/workflows.
-    # The shared base module goes one directory up, next to the per-env
-    # packages, because both environment workflows import it from there.
+    # The DTDD workflow is the method; it is installed as new files at the
+    # module path the overlay registers in trinity/common/workflows. The shared
+    # base module goes one directory up, next to the per-env packages.
     install_workflow() {
         local src=$1 dst=$2
         if ! cmp -s "$src" "$dst" 2>/dev/null; then
@@ -130,10 +132,8 @@ if [ "$AGENTIC" = 1 ]; then
     }
     install_workflow "$AG/workflows/dtdd_base_workflow.py" \
                      "$TCOD/trinity/common/workflows/envs/TCOD/dtdd_base_workflow.py"
-    for env in alfworld webshop; do
-        install_workflow "$AG/workflows/dtdd_${env}_workflow.py" \
-                         "$TCOD/trinity/common/workflows/envs/TCOD/$env/DTDD_workflow.py"
-    done
+    install_workflow "$AG/workflows/dtdd_alfworld_workflow.py" \
+                     "$TCOD/trinity/common/workflows/envs/TCOD/alfworld/DTDD_workflow.py"
 
     # ALFWorld task lists ship with the base under the original author's
     # absolute game-file paths. Rewrite that prefix to ALFWORLD_DATA. Done from
@@ -151,21 +151,15 @@ if [ "$AGENTIC" = 1 ]; then
         echo "   export ALFWORLD_DATA=/path/to/alfworld/data and re-run (see README)."
     fi
 
-    fetch_pinned "${WEBSHOP_URL:-https://github.com/princeton-nlp/WebShop.git}" \
-                 "${WEBSHOP_PIN:-64fa2a5}" "$WEBSHOP" \
-                 "web_agent_site/utils.py default catalog paths"
-    apply_overlay "$WEBSHOP" "$AG/overlay/webshop_catalog.patch"
-
     probe third_party/TCOD/trinity/buffer/utils.py "A context manager that yields a session exactly once"
     probe third_party/TCOD/trinity/common/models/vllm_model.py _wait_adapter_complete
-    probe third_party/TCOD/trinity/common/workflows/__init__.py DTDD_alfworld_workflow DTDD_webshop_workflow
+    probe third_party/TCOD/trinity/common/workflows/__init__.py DTDD_alfworld_workflow
     probe third_party/TCOD/trinity/common/workflows/envs/TCOD/dtdd_base_workflow.py DTDDAgenticWorkflow
-    probe third_party/WebShop/web_agent_site/utils.py items_shuffle_120000
 fi
 
-# ---------------------------------------------------------------- code lane
+# ------------------------------------------------------------------ coding
 if [ "$CODE" = 1 ]; then
-    CD=$ROOT/recipe_dtdd_code
+    CD=$ROOT/code
     SOD=$ROOT/third_party/SOD
 
     fetch_pinned "${SOD_URL:-https://github.com/YoungZ365/SOD.git}" \
@@ -199,13 +193,12 @@ cat <<EOF
 
 Base ready.
   third_party/OPD   $(git -C "$ROOT/third_party/OPD" rev-parse --short HEAD) ($(git -C "$ROOT/third_party/OPD" log -1 --format=%s))
-  verl ->           third_party/OPD/verl
+  verl ->           third_party/OPD/verl  (+ verl_sp_fix.patch)
   eval parquets     third_party/OPD/scripts/val/data  (AIME24/25, AMC23, MATH-500, ...)
 EOF
 if [ "$AGENTIC" = 1 ]; then
 cat <<EOF
-  third_party/TCOD     $(git -C "$ROOT/third_party/TCOD" rev-parse --short HEAD) + tcod_overlay.patch + DTDD workflows
-  third_party/WebShop  $(git -C "$ROOT/third_party/WebShop" rev-parse --short HEAD) + webshop_catalog.patch
+  third_party/TCOD     $(git -C "$ROOT/third_party/TCOD" rev-parse --short HEAD) + tcod_overlay.patch + DTDD workflow
 EOF
 fi
 if [ "$CODE" = 1 ]; then
@@ -215,30 +208,7 @@ EOF
 fi
 cat <<EOF
 
-Next:
-  1. export OPD_ROOT=$ROOT
-  2. export SIF=/path/to/verl_vllm011.sif        # see README "Environment"
-     export EXTRA_PKGS=/path/to/math-verify-dir  # pip install --target
-  3. put student/teacher HF checkpoints under models/ and the training parquet
-     under datasets/ (see README "Models and data")
-  4. sbatch scripts/train/run_dtdd.sbatch        # or run_opd / run_grpo
+Next: see README.md for models, data and the train / eval commands.
+  export DTDD_ROOT=$ROOT
+  export SIF=/path/to/verl_vllm011.sif   # the container every run uses
 EOF
-if [ "$AGENTIC" = 1 ]; then
-cat <<EOF
-  agentic lane, additionally:
-  5. scripts/env/make_agentic_venv.sh            # once; then export AGENTIC_VENV
-  6. ALFWorld: alfworld-download; export ALFWORLD_DATA; re-run ./setup.sh --agentic
-     WebShop:  see README "WebShop data" (catalog, search index, task lists)
-  7. ENV=alfworld CONFIG=recipe_dtdd_agentic/configs/alfworld/dtdd_lora.yaml \\
-       sbatch scripts/train/run_dtdd_agentic.sbatch
-EOF
-fi
-if [ "$CODE" = 1 ]; then
-cat <<EOF
-  code lane, additionally:
-  5. scripts/env/make_code_env.sh                # once; then export CODE_ENV
-  6. build the datasets and the sandbox image (see README "Code data",
-     "Sandbox"); export SANDBOX_SIF
-  7. ARM=dtdd sbatch scripts/train/run_dtdd_code.sbatch   # or ARM=opd
-EOF
-fi

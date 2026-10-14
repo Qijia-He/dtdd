@@ -1,0 +1,17 @@
+DTDD: Divergence-Triggered Dynamic Distillation
+Copyright 2026 The DTDD authors. Licensed under the Apache License, Version 2.0.
+
+This repository contains code derived from the following projects:
+
+- verl (https://github.com/volcengine/verl), Copyright 2024 Bytedance Ltd.
+  and/or its affiliates, Apache License 2.0. The files code/recipe/dtdd/*.py
+  extend verl classes and keep their original copyright headers.
+
+The following projects are not included in this repository. setup.sh fetches
+them at pinned commits and applies the patches in math/, alfworld/ and code/;
+each keeps its own license:
+
+- thunlp/OPD           https://github.com/thunlp/OPD
+- kokolerk/TCOD        https://github.com/kokolerk/TCOD
+- YoungZ365/SOD        https://github.com/YoungZ365/SOD
+- SandboxFusion        https://github.com/bytedance/SandboxFusion (container image, used by the coding example)

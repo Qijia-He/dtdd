@@ -1,0 +1,74 @@
+hydra:
+  searchpath:
+    - file://verl/trainer/config
+
+defaults:
+  - ppo_trainer
+  - _self_
+
+# ============================================================
+# DTDD: Divergence-Triggered Dynamic Distillation
+# All DTDD config lives in this top-level block. It must not go under
+# algorithm:/rollout:, which verl converts to strict dataclasses.
+# ============================================================
+dtdd:
+  enable: true
+  # Divergence trigger threshold on the per-turn
+  # d_k = mean |student_logprob - teacher_logprob| over the turn's tokens.
+  # Calibrated from DTDD_DRY_RUN=1 (shadow) runs of vanilla OPD: 0.5 is
+  # about the 75th percentile of d_k, implying a trigger rate near 0.5 and a
+  # teacher-token fraction near 0.16. The paper sweeps {0.26, 0.50}.
+  tau: 0.5
+  # P(episode uses the random trigger instead of the divergence trigger).
+  epsilon_random: 0.2
+  # Earliest assistant turn allowed to trigger.
+  min_prefix_turns: 1
+  # Random mode: k ~ Uniform{min_prefix_turns, random_turn_max}.
+  random_turn_max: 8
+  # "rewind": discard the divergent turn; the teacher regenerates from h_{k-1}.
+  # "inherit": keep the divergent turn; the teacher continues from k+1.
+  takeover_mode: rewind
+  # Skip the takeover when the remaining response budget (tokens) is below
+  # this.
+  min_takeover_budget: 1024
+  # Score and log d_k / would-trigger, but never take over.
+  dry_run: false
+  # 0.0 = pure distillation on the prefix; 1.0 = hybrid GRPO + distillation.
+  grpo_prefix_coef: 0.0
+  # Suffix SFT loss coefficient (0 disables the suffix loss entirely).
+  suffix_sft_coef: 1.0
+  # "ce": cross-entropy on teacher tokens; "kl": low-variance KL vs teacher.
+  suffix_loss_type: ce
+  # Zero the suffix SFT mask for episodes whose reward is at or below
+  # suffix_success_threshold.
+  drop_failed_suffix: false
+  suffix_success_threshold: 0.5
+  teacher:
+    model_path: null
+    tensor_model_parallel_size: 8
+    gpu_memory_utilization: 0.25
+    max_num_seqs: 128
+    # Chunked-prefill chunk size. Keep it small: prompt_logprobs materialises
+    # a full-vocabulary logits buffer per chunk outside the engine's memory
+    # budget (about chunk_size x 151K vocab x 4 bytes). 8192 produced a
+    # 7.5 GiB spike and an EngineCore OOM; 2048 keeps it near 1.9 GiB.
+    max_num_batched_tokens: 2048
+    enforce_eager: true
+    # vLLM V1 rejects prompt_logprobs together with prefix caching.
+    enable_prefix_caching: false
+    # Must stay 1: level 2 discards the frozen weights, and the teacher has
+    # no weight-sync path to restore them from.
+    sleep_level: 1
+    temperature: 1.0
+    top_p: 1.0
+    dtype: bfloat16
+
+actor_rollout_ref:
+  rollout:
+    # Student rollout logprobs are required for the divergence trigger.
+    calculate_log_probs: true
+    agent:
+      # Remaps agent_name "tool_agent" to DTDDToolAgentLoop. Run scripts
+      # override this with an absolute path so Ray workers resolve it
+      # regardless of their working directory.
+      agent_loop_config_path: recipe/dtdd/config/agent_loop.yaml
