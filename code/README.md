@@ -13,7 +13,7 @@ support and robustness fixes to the base (see `overlay/PATCH_NOTES.md`).
 | `recipe/dtdd/run_dtdd_code.sh`, `config/` | the hydra overrides behind the paper's runs |
 | `sft.sbatch` | builds the student (SOD's cold-start SFT) |
 | `train.sbatch`, `eval.sbatch` | launchers |
-| `data/` | builders for the training slice, the held-out split and LiveCodeBench |
+| `data/` | builders for the training slice, the HO-200 evaluation split and LiveCodeBench |
 | `sandbox/`, `overlay/sandbox_runner_stdin.patch` | the SandboxFusion server every program runs in |
 
 ## Environment
@@ -51,7 +51,7 @@ sbatch code/sft.sbatch     # student: 5-epoch SFT (115 updates) -> models/Qwen3-
 ```bash
 huggingface-cli download --repo-type dataset Gen-Verse/Open-AgentRL-30K --local-dir datasets/Open-AgentRL-30K
 
-# 1. the training slice and the 200-problem held-out split
+# 1. the training slice and the 200-problem HO-200 evaluation split
 $CODE_ENV/bin/python code/data/build_code_slices.py \
     --source datasets/Open-AgentRL-30K/Open-AgentRL-30K.parquet \
     --indices code/data/heldout200_indices.json \
@@ -68,7 +68,12 @@ done
 
 The training slice keeps every `train-code-*` row of Open-AgentRL-30K (4,205
 problems) and caps each one's grading tests at 12, since every training
-response is executed. The held-out split ships as the exact 200 row indices.
+response is executed. HO-200 ships as the exact 200 row indices. These 200
+problems are part of `code_slice_train.parquet`, which the paper's runs (and the
+default launcher) train on, so HO-200 measures in-distribution performance on
+seen problems; LiveCodeBench is the held-out benchmark. To keep HO-200 unseen,
+train on `code_slice_train_minus200.parquet` (written by the same command):
+`OPEN_AGENT_RL=datasets/code/code_slice_train_minus200.parquet`.
 The LiveCodeBench files are rebuilt because the parquet in
 `Open-AgentRL-Eval` uses one test case both as the worked example in the
 prompt and as the grading truth, so a program that echoes the shown output
@@ -102,6 +107,6 @@ ARM=opd  sbatch code/train.sbatch     # OPD baseline: same code path, trigger di
 ARM=qwen3_1p7b_code_dtdd STEPS="60" sbatch code/eval.sbatch
 ```
 
-The evaluation scores held-out (subsampled and full test suites) and
+The evaluation scores HO-200 (subsampled and full test suites) and
 LiveCodeBench v1/v6 at average@8 and appends rows to
 `results/code_eval.jsonl`.

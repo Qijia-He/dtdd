@@ -11,7 +11,7 @@ The following projects are not included in this repository. setup.sh fetches
 them at pinned commits and applies the patches in math/, alfworld/ and code/;
 each keeps its own license:
 
-- thunlp/OPD           https://github.com/thunlp/OPD
-- kokolerk/TCOD        https://github.com/kokolerk/TCOD
-- YoungZ365/SOD        https://github.com/YoungZ365/SOD
-- SandboxFusion        https://github.com/bytedance/SandboxFusion (container image, used by the coding example)
+- Thinking-Space/Rethinking-OPD  https://github.com/Thinking-Space/Rethinking-OPD (formerly thunlp/OPD)
+- kokolerk/TCOD                  https://github.com/kokolerk/TCOD
+- YoungZ365/SOD                  https://github.com/YoungZ365/SOD
+- SandboxFusion                  https://github.com/bytedance/SandboxFusion (container image, used by the coding example)

@@ -6,9 +6,9 @@
 # produced with, applies the small patches the lanes need, and links things
 # into place.
 #
-#   math      thunlp/OPD@4532fd3      -> third_party/OPD, linked as verl/
-#   alfworld  kokolerk/TCOD@465eef4   -> third_party/TCOD
-#   code      YoungZ365/SOD@110c4b8   -> third_party/SOD   (LiveCodeBench)
+#   math      Thinking-Space/Rethinking-OPD@4532fd3 -> third_party/OPD, linked as verl/
+#   alfworld  kokolerk/TCOD@465eef4                 -> third_party/TCOD
+#   code      YoungZ365/SOD@110c4b8                 -> third_party/SOD   (LiveCodeBench)
 #
 #   ./setup.sh                 # math only (the default)
 #   ./setup.sh --alfworld      # math + ALFWorld
@@ -85,7 +85,7 @@ probe() {
 }
 
 # ---------------------------------------------------------------- math lane
-fetch_pinned "${UPSTREAM_URL:-https://github.com/thunlp/OPD.git}" \
+fetch_pinned "${UPSTREAM_URL:-https://github.com/Thinking-Space/Rethinking-OPD.git}" \
              "${UPSTREAM_PIN:-4532fd3}" "$ROOT/third_party/OPD" \
              "rm_wg.compute_rm_score and compute_distillation_reward"
 

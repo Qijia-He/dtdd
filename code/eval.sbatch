@@ -55,8 +55,9 @@ _n=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
 export CUDA_VISIBLE_DEVICES=$(seq -s, 0 $((_n - 1)))
 
 # Four validation sets in one pass. Each isolates a different candidate cause
-# for the code lane's train/held-out gap:
-#   heldout200_sub    200 unseen problems from the TRAINING distribution with
+# for the gap between training reward and benchmark accuracy:
+#   heldout200_sub    200 problems of the training slice (in-distribution; the
+#                     default training file contains them) with
 #                     the same subsampled tests (mean 7) -- same prompt
 #                     construction, same reward
 #   heldout200_full   the SAME 200 problems with their full suites (mean 45).
@@ -70,7 +71,7 @@ DATA=${CODE_DATA_DIR:-$DTDD_ROOT/datasets/code}
 export LIVECODEBENCH=$DATA/lcb_v6_fixed.parquet
 # Two GROUPS, not one list. verl concatenates val_files into a single
 # dataset, and the two families do not share a schema after their map
-# functions: the held-out parquets go through map_fn_skywork and keep
+# functions: the HO-200 parquets go through map_fn_skywork and keep
 # reward_model.ground_truth as a JSON string, while the lcb_fixed parquets go
 # through map_lcb and emit a nested dict. Passing all four at once fails in
 # datasets.concatenate_datasets ("features can't be aligned ... ground_truth").
@@ -84,7 +85,7 @@ _mk() {
 print('[' + ','.join(repr(p) for p in sys.argv[1:]) + ']')" "$@"
 }
 _vf1=$(_mk $GROUP1); _vf2=$(_mk $GROUP2)
-echo "val group 1 (training-schema held-out): $_vf1"
+echo "val group 1 (HO-200, training schema):  $_vf1"
 echo "val group 2 (lcb_fixed):                $_vf2"
 
 # Match the training-time validation.

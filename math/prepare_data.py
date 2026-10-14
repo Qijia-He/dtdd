@@ -10,7 +10,7 @@ prompt.)
     python math/prepare_data.py            # writes $DTDD_ROOT/datasets/dapo-math-17k.parquet
 
 The evaluation sets (AIME24, AIME25, AMC23) need no preparation: setup.sh links
-them from the thunlp/OPD checkout.
+them from the Thinking-Space/Rethinking-OPD checkout.
 """
 import os
 

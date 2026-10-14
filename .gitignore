@@ -1,6 +1,6 @@
 __pycache__/
 *.pyc
-# Fetched by setup.sh, never committed: the thunlp/OPD base and the verl symlink
+# Fetched by setup.sh, never committed: the Thinking-Space/Rethinking-OPD base and the verl symlink
 # into it. (Patterns below stay anchored to the repo root -- an unanchored
 # `models/`/`checkpoint/` once matched paths inside the vendored tree and
 # silently dropped 72 upstream files from a commit.)

@@ -1,4 +1,4 @@
-"""DTDD trainer for the thunlp/OPD verl v0.7 fork.
+"""DTDD trainer for the Thinking-Space/Rethinking-OPD verl v0.7 fork.
 
 Zero-copy insertion: subclass RayPPOTrainer, and in init_workers() wrap two
 driver-side worker-group proxy methods (see PORT_PLAN.md for the full design):

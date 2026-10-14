@@ -1,4 +1,4 @@
-"""Frozen-teacher generation pool for DTDD on the thunlp/OPD verl v0.7 fork.
+"""Frozen-teacher generation pool for DTDD on the Thinking-Space/Rethinking-OPD verl v0.7 fork.
 
 Minimal sibling of SOD recipe/dtdd/teacher_vllm_server.py: this fork has no
 AsyncvLLMServer, and DTDD's fit-loop stage is synchronous, so we wrap the
