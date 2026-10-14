@@ -44,7 +44,8 @@ export EVAL_MODELS="$MODELS"
 echo "MERGED. EVAL_MODELS=$EVAL_MODELS"
 
 cd ${DTDD_ROOT}/math/eval
-export PYTHONPATH=$EXTRA_PKGS
+# grade.py's answer checker (utils.grade_answer_verl) ships with the upstream base.
+export PYTHONPATH=${DTDD_ROOT}/third_party/OPD/scripts/val/eval:$EXTRA_PKGS
 # benchmark parquets come from the upstream base that setup.sh cloned
 export EVAL_DATA_DIR=${EVAL_DATA_DIR:-${DTDD_ROOT}/third_party/OPD/scripts/val/data}
 apptainer exec --nv --bind "${BIND_ROOT:-$PWD}" "$SIF" bash -c "python3 gen_vllm.py --disable-thinking"
