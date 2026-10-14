@@ -1,6 +1,20 @@
-# DTDD: Divergence-Triggered Dynamic Distillation for Reliable On-Policy Supervision
-
-[**Project page**](https://dtdd-proj.github.io/) · **Paper** (coming soon) · [**Citation**](#citation)
+<div align="center">
+  <h1>DTDD: Divergence-Triggered Dynamic Distillation<br>for Reliable On-Policy Supervision</h1>
+</div>
+<p align="center">
+  <a href="LICENSE">
+    <img alt="License" src="https://img.shields.io/badge/license-Apache--2.0-blue">
+  </a>
+  <a href="https://dtdd-proj.github.io/">
+    <img alt="Project page" src="https://img.shields.io/badge/DTDD-project%20page-2f6f52">
+  </a>
+  <a href="https://dtdd-proj.github.io/">
+    <img alt="Paper" src="https://img.shields.io/badge/paper-coming%20soon-lightgrey">
+  </a>
+  <a href="#citation">
+    <img alt="Citation" src="https://img.shields.io/badge/cite-BibTeX-orange">
+  </a>
+</p>
 
 <p align="center">
   <img src="assets/overview.png" width="92%" alt="DTDD pipeline: the student generates, segment-level divergence is monitored, and the teacher takes over the rest of the sequence once a segment diverges past the threshold.">
@@ -131,13 +145,70 @@ ARM=qwen3_1p7b_code_dtdd STEPS="60" sbatch code/eval.sbatch   # held-out + LiveC
 
 ## Results
 
-From the paper, at matched updates (two-seed means for math):
+The main findings of the paper. Accuracy is average@k (%) on held-out sets;
+agentic numbers are success rates (%).
 
-| Example | Metric | OPD | DTDD |
+### 1. DTDD removes the long-horizon OPD instability
+
+DeepSeek-R1-Distill-Qwen-1.5B ← JustRL-DeepSeek-1.5B on DAPO-Math-17K. With
+15K and 18K response budgets, OPD enters a late gradient storm together with a
+spike in truncated rollouts. DTDD cuts the peak gradient norm **8.6×**
+(12.02 → 1.40) and **7.0×** (12.81 → 1.84), with held-out accuracy within one
+point of OPD at every budget.
+
+<p align="center"><img src="assets/stability.png" width="92%" alt="Gradient norm and truncated-rollout ratio over training at 15K and 18K budgets: OPD spikes near update 200, DTDD stays low."></p>
+
+### 2. DTDD warms up a base student online, without an SFT stage
+
+Qwen3-1.7B-Base ← Qwen3-4B-Base-GRPO on DAPO-Math-17K. DTDD reaches the
+21.3% held-out reference level near **update 70**; OPD needs about **180**.
+Counting wall-clock time, DTDD reaches 21.34% in 22.0 hours, while offline
+SFT followed by OPD reaches 21.55% in about 42.8 serial hours, using 95M
+teacher-written tokens against DTDD's 43M. Both later converge near 22%.
+
+<p align="center"><img src="assets/base_warmup.png" width="92%" alt="Held-out AIME24, AIME25 and AMC23 accuracy over training: DTDD with 64-, 128- and 256-token windows rises well before OPD."></p>
+
+### 3. Both design choices matter: segment-level triggering and BC on the suffix
+
+Same base-student setting, update 120 (OPD and DTDD: two-seed means). The math
+example in this repository is the DTDD row.
+
+| Trigger | Suffix loss | Teacher tokens / update | Accuracy |
 |---|---|---|---|
-| Math (update 120) | AIME24/25 + AMC23, average@16 | 14.54 | **20.83** |
-| ALFWorld (update 400) | seen / unseen success | 70.71 / 69.40 | **84.29** / **70.90** |
-| Coding (update 60) | held-out / LiveCodeBench, average@8 | 26.03 / 41.65 | **36.72** / **44.46** |
+| none (OPD) | – | 0 | 14.54 |
+| **Segment (DTDD)** | **BC** | 0.52M | **20.83** |
+| Token spike | KD | 0.40M | 13.51 |
+| Token spike | BC | 0.43M | 16.79 |
+| Segment | KD | 0.67M | 10.23 |
+| AdaSwitch | KD | 0.86M | 19.95 |
+
+### 4. It transfers to multi-turn agents
+
+Best-observed checkpoints; takeover is used only in training, and evaluation
+runs the student alone.
+
+| Setting | OPD | DTDD |
+|---|---|---|
+| ALFWorld: Qwen2.5-3B-Instruct (LoRA) ← GiGPO-7B, seen / unseen | 83.57 / 69.40 | **84.29 / 78.36** |
+| ALFWorld average | 76.49 | **81.32** (+4.83) |
+| Coding: Qwen3-1.7B (SFT) ← 4B GRPO teacher, average of held-out and LiveCodeBench | 36.49 | **40.59** (+4.10) |
+
+On ALFWorld, takeover starts at 90% and falls to near zero as the student
+aligns, then briefly re-activates when the discrepancy rises again, so DTDD
+also works as an online monitor. On coding, a sparse 2.8% teacher-token dose
+improves all four evaluation splits.
+
+### 5. When takeover helps: headroom
+
+Across 23 arms in 13 settings, 19 follow one pattern: DTDD's gains concentrate
+where plain OPD leaves headroom below its teacher,
+h = 1 − OPD<sub>end</sub> / teacher. Three controls mark the limits. The
+teacher must be a valid source at the takeover state (on WebShop it scores
+below OPD, and takeover hurts); the student must be able to learn the recovery
+(a 0.5B ALFWorld student cannot); and the dose must stay moderate (about 50%
+takeover on coding costs 5.8 points).
+
+<p align="center"><img src="assets/headroom.png" width="80%" alt="DTDD minus OPD against headroom left by OPD: gains appear at moderate-to-large headroom, losses where OPD is near or above the teacher."></p>
 
 ## Repository layout
 
