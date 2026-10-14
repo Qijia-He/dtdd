@@ -20,8 +20,9 @@
 #   DTDD_ENABLE=0 sbatch math/train.sbatch        # plain OPD baseline, same settings
 #   SMOKE=1 sbatch --time=2:00:00 math/train.sbatch   # 2-update smoke test
 #
-# GPU layout (4 GPUs): the student trains on the first NGPU-2 cards and two
-# dedicated teacher engines generate takeover suffixes on the last two. Sharing
+# GPU layout (4 GPUs, as in the paper): the student trains on the first two cards
+# and two dedicated teacher engines generate takeover suffixes on the last two.
+# The minimum is 2 GPUs (one student, one teacher engine). Sharing
 # cards between student and teacher has no good operating point (the teacher's
 # KV cache either starves generation or the student OOMs on wake-up), so the
 # teacher always gets its own GPUs. Any DTDD_* knob can be overridden from the
@@ -63,8 +64,9 @@ export MAX_RESP_LENGTH=${MAX_RESP_LENGTH:-7168} MAX_VAL_RESP_LENGTH=${MAX_VAL_RE
 export DTDD_TAU=${DTDD_TAU:-0.362} DTDD_CHUNK=${DTDD_CHUNK:-128}
 export DTDD_MIN_PREFIX=${DTDD_MIN_PREFIX:-1} DTDD_MODE=${DTDD_MODE:-rewind}
 
-# GPU split: dedicated teacher engines on the last TEACHER_ENGINES cards.
-TEACHER_ENGINES=${TEACHER_ENGINES:-2}
+# GPU split: dedicated teacher engines on the last TEACHER_ENGINES cards
+# (2 of 4 GPUs in the paper's runs; 1 of 2 GPUs, the minimum, also works).
+TEACHER_ENGINES=${TEACHER_ENGINES:-$([ "$_n_gpus" -ge 4 ] && echo 2 || echo 1)}
 if [ "$DTDD_ENABLE" = "1" ]; then STUDENT_GPUS=$(( _n_gpus - TEACHER_ENGINES )); else STUDENT_GPUS=$_n_gpus; fi
 export DTDD_TEACHER_ENGINES=$TEACHER_ENGINES DTDD_TEACHER_GPU_OFFSET=$STUDENT_GPUS
 export DTDD_TEACHER_GPU_UTIL=${DTDD_TEACHER_GPU_UTIL:-0.80}   # of its own card

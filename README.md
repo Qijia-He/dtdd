@@ -50,8 +50,9 @@ the defaults are listed at the top of `math/dtdd_trainer.py`,
 
 ## Setup
 
-All three examples need Linux, NVIDIA GPUs (4 per run; 80 GB A100 or
-44–48 GB L40S/A40), [Apptainer](https://apptainer.org/), and SLURM for the
+All three examples need Linux, NVIDIA GPUs (the paper's runs used 4 per run;
+the math example runs on as few as 2: one for the student, one for the teacher;
+80 GB A100 or 44–48 GB L40S/A40), [Apptainer](https://apptainer.org/), and SLURM for the
 provided launchers. The launchers are short; strip the `#SBATCH` lines and the
 `apptainer exec` wrapper to run elsewhere.
 
