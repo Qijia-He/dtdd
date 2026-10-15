@@ -8,8 +8,8 @@
   <a href="https://dtdd-proj.github.io/">
     <img alt="Project page" src="https://img.shields.io/badge/DTDD-project%20page-2f6f52">
   </a>
-  <a href="https://dtdd-proj.github.io/">
-    <img alt="Paper" src="https://img.shields.io/badge/paper-coming%20soon-lightgrey">
+  <a href="https://arxiv.org/abs/2610.19302">
+    <img alt="Paper" src="https://img.shields.io/badge/paper-arXiv-b31b1b">
   </a>
   <a href="#citation">
     <img alt="Citation" src="https://img.shields.io/badge/cite-BibTeX-orange">
@@ -308,11 +308,14 @@ assets/         figures
 ## Citation
 
 ```bibtex
-@article{he2026dtdd,
-  title  = {DTDD: Divergence-Triggered Dynamic Distillation for Reliable On-Policy Supervision},
-  author = {He, Qijia and Li, Zequn and Luo, Spencer and Chen, Tianle and Narayana, Pradyumna and
-            Ma, Zixian and Krishna, Ranjay and Nie, Lan and Basu, Sugato},
-  year   = {2026}
+@misc{he2026dtdddivergencetriggereddynamicdistillation,
+  title={DTDD: Divergence-Triggered Dynamic Distillation for Reliable On-Policy Supervision},
+  author={Qijia He and Zequn Li and Spencer Luo and Tianle Chen and Pradyumna Narayana and Zixian Ma and Ranjay Krishna and Lan Nie and Sugato Basu},
+  year={2026},
+  eprint={2610.19302},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2610.19302},
 }
 ```
 
