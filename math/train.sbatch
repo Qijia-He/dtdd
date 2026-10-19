@@ -68,6 +68,11 @@ export DTDD_MIN_PREFIX=${DTDD_MIN_PREFIX:-1} DTDD_MODE=${DTDD_MODE:-rewind}
 # (2 of 4 GPUs in the paper's runs; 1 of 2 GPUs, the minimum, also works).
 TEACHER_ENGINES=${TEACHER_ENGINES:-$([ "$_n_gpus" -ge 4 ] && echo 2 || echo 1)}
 if [ "$DTDD_ENABLE" = "1" ]; then STUDENT_GPUS=$(( _n_gpus - TEACHER_ENGINES )); else STUDENT_GPUS=$_n_gpus; fi
+if [ "$STUDENT_GPUS" -lt 1 ]; then
+  echo "ERROR: $_n_gpus GPU(s) visible on this node; DTDD needs at least 2 on one node" >&2
+  echo "       (one student, one teacher engine). Request --nodes=1 --gpus-per-node=2 or more." >&2
+  exit 1
+fi
 export DTDD_TEACHER_ENGINES=$TEACHER_ENGINES DTDD_TEACHER_GPU_OFFSET=$STUDENT_GPUS
 export DTDD_TEACHER_GPU_UTIL=${DTDD_TEACHER_GPU_UTIL:-0.80}   # of its own card
 export STUDENT_GPU_UTIL=${STUDENT_GPU_UTIL:-0.45}
