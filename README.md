@@ -64,9 +64,9 @@ the defaults are listed at the top of `math/dtdd_trainer.py`,
 
 ## Setup
 
-All three examples need Linux, NVIDIA GPUs (the paper's runs used 4 per run;
-the math example runs on as few as 2: one for the student, one for the teacher;
-80 GB A100 or 44–48 GB L40S/A40), [Apptainer](https://apptainer.org/), and SLURM for the
+All three examples need Linux, NVIDIA GPUs (4 per run, as in the paper:
+44–48 GB L40S/A40 or 80 GB A100/H100; the math example also fits on 2 GPUs
+with 80 GB, one for the student and one for the teacher), [Apptainer](https://apptainer.org/), and SLURM for the
 provided launchers. The launchers are short; strip the `#SBATCH` lines and the
 `apptainer exec` wrapper to run elsewhere.
 
@@ -112,7 +112,7 @@ huggingface-cli download Thinking-Space/Qwen3-4B-Base-GRPO --local-dir models/Qw
 python math/prepare_data.py
 
 # 3. Train (4 GPUs: student on 2, two dedicated teacher engines on the other 2;
-#    2 GPUs also work: one each). Defaults are the paper's DTDD run:
+#    on 80 GB cards 2 GPUs also work, one each). Defaults are the paper's DTDD run:
 #    tau = 0.362 over 128-token windows, rewind takeover, behaviour cloning on
 #    the teacher suffix, 64 prompts x 4 responses per update, 7,168-token
 #    responses, 120 updates, a checkpoint every 20 updates.
