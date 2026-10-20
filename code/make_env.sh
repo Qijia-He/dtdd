@@ -45,15 +45,24 @@ if [ ! -x "$ENV_DIR/bin/python" ]; then
 fi
 PYTHON="$ENV_DIR/bin/python"
 
+# Everything after torch is installed against the frozen versions in
+# requirements-lock.txt, so the environment does not drift as PyPI moves on
+# (unpinned, pip now picks e.g. pyarrow 26, which needs NumPy 2, while the base
+# requires numpy<2). verl is the editable SOD checkout and the two wheels below
+# are not on PyPI, so they are left out of the constraints.
+CONSTRAINTS="$ENV_DIR/constraints-lock.txt"
+grep -E '^[A-Za-z0-9_.-]+==' "$DTDD_ROOT/code/requirements-lock.txt" |
+  grep -v -i -E '^(verl|flash[-_]attn|flashinfer)' > "$CONSTRAINTS"
+
 echo "== installing torch $TORCH_PIN (cu124) and vLLM $VLLM_PIN"
 "$PYTHON" -m pip install --quiet --upgrade pip
 "$PYTHON" -m pip install --quiet \
     --index-url https://download.pytorch.org/whl/cu124 \
-    "torch==$TORCH_PIN" torchvision torchaudio
-"$PYTHON" -m pip install --quiet "vllm==$VLLM_PIN"
+    "torch==$TORCH_PIN" torchvision==0.21.0 torchaudio==2.6.0
+"$PYTHON" -m pip install --quiet -c "$CONSTRAINTS" "vllm==$VLLM_PIN"
 
 echo "== installing the SOD base (editable) and its extras"
-"$PYTHON" -m pip install --quiet -e "$SOD[vllm,math]"
+"$PYTHON" -m pip install --quiet -c "$CONSTRAINTS" -e "$SOD[vllm,math]"
 
 if ! "$PYTHON" -c 'import flash_attn' 2>/dev/null; then
   echo "== installing flash-attn (prebuilt wheel)"

@@ -30,8 +30,20 @@ FLASH_ATTN_PIN=2.8.1     # rebuilt against the venv's torch 2.9
 NUMPY_PIN=1.26.4
 SCIPY_PIN=1.13.1
 
+# Installs are constrained to the frozen versions in alfworld/requirements-lock.txt so the
+# venv does not drift as PyPI moves on. Only plain name==version pins are used: the lock
+# also lists image builds (git/URL/local wheels) that pip cannot fetch.
+CONSTRAINTS="$VENV.constraints.txt"
+grep -E '^[A-Za-z0-9_.-]+==' "$DTDD_ROOT/alfworld/requirements-lock.txt" | grep -v '+' |
+  grep -v -i -E '^(flash[-_]attn|trinity[-_]rft)==' > "$CONSTRAINTS"
+
 apptainer exec --nv --bind "$DTDD_ROOT" --bind "$(dirname "$VENV")" "$SIF" bash -c "
   set -euo pipefail
+  # Build steps call a bare 'python' (e.g. fast-downward-textworld's build.py). The host
+  # PATH reaches the container, and a host interpreter there cannot even import the
+  # standard library inside it, so pin PATH to the venv and the image.
+  export PATH='$VENV/bin':/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  unset PYTHONPATH PYTHONHOME PYTHONSTARTUP
   if [ ! -x '$VENV/bin/python' ]; then
     echo '== creating venv with the image python' \$(python3 --version)
     python3 -m venv '$VENV'
@@ -41,8 +53,8 @@ apptainer exec --nv --bind "$DTDD_ROOT" --bind "$(dirname "$VENV")" "$SIF" bash 
   cd '$TCOD'
   # trinity_rft is an EDITABLE install of the patched checkout, so the overlay
   # and the DTDD workflows are what gets imported.
-  \$P -m pip install --quiet -e '.[vllm,dev]'
-  \$P -m pip install --quiet 'vllm==$VLLM_PIN' alfworld
+  \$P -m pip install --quiet -c '$CONSTRAINTS' -e '.[vllm,dev]'
+  \$P -m pip install --quiet -c '$CONSTRAINTS' 'vllm==$VLLM_PIN' alfworld
   \$P -m pip install --quiet --no-deps 'numpy==$NUMPY_PIN' 'scipy==$SCIPY_PIN'
   # torch 2.9 needs its bundled NVIDIA libs on the loader path for any import.
   export LD_LIBRARY_PATH=\$(ls -d '$VENV'/lib/python3.12/site-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\${LD_LIBRARY_PATH:-}
