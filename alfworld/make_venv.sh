@@ -30,12 +30,11 @@ FLASH_ATTN_PIN=2.8.1     # rebuilt against the venv's torch 2.9
 NUMPY_PIN=1.26.4
 SCIPY_PIN=1.13.1
 
-# Installs are constrained to the frozen versions in alfworld/requirements-lock.txt so the
-# venv does not drift as PyPI moves on. Only plain name==version pins are used: the lock
-# also lists image builds (git/URL/local wheels) that pip cannot fetch.
-CONSTRAINTS="$VENV.constraints.txt"
-grep -E '^[A-Za-z0-9_.-]+==' "$DTDD_ROOT/alfworld/requirements-lock.txt" | grep -v '+' |
-  grep -v -i -E '^(flash[-_]attn|trinity[-_]rft)==' > "$CONSTRAINTS"
+# The venv is the paper's: --system-site-packages over the unmodified image, plus the
+# exact layer of packages that differ from the image (alfworld/requirements-venv.txt),
+# installed with --no-deps. Re-resolving with pip instead does not work any more: packages
+# outside the pins have moved on, and their new requirements contradict the frozen ones.
+LAYER=$DTDD_ROOT/alfworld/requirements-venv.txt
 
 apptainer exec --nv --bind "$DTDD_ROOT" --bind "$(dirname "$VENV")" "$SIF" bash -c "
   set -euo pipefail
@@ -46,16 +45,17 @@ apptainer exec --nv --bind "$DTDD_ROOT" --bind "$(dirname "$VENV")" "$SIF" bash 
   unset PYTHONPATH PYTHONHOME PYTHONSTARTUP
   if [ ! -x '$VENV/bin/python' ]; then
     echo '== creating venv with the image python' \$(python3 --version)
-    python3 -m venv '$VENV'
+    # --system-site-packages: the venv layers over the image's packages and only
+    # overrides what TCOD needs newer, exactly how the paper's venv was built.
+    python3 -m venv --system-site-packages '$VENV'
   fi
   P='$VENV/bin/python'
   \$P -m pip install --quiet --upgrade pip
   cd '$TCOD'
-  # trinity_rft is an EDITABLE install of the patched checkout, so the overlay
-  # and the DTDD workflows are what gets imported.
-  \$P -m pip install --quiet -c '$CONSTRAINTS' -e '.[vllm,dev]'
-  \$P -m pip install --quiet -c '$CONSTRAINTS' 'vllm==$VLLM_PIN' alfworld
-  \$P -m pip install --quiet --no-deps 'numpy==$NUMPY_PIN' 'scipy==$SCIPY_PIN'
+  # The frozen layer first; then trinity_rft as an EDITABLE install of the patched
+  # checkout, so the overlay and the DTDD workflows are what gets imported.
+  \$P -m pip install --progress-bar off --no-deps -r '$LAYER'
+  \$P -m pip install --quiet --no-deps -e .
   # torch 2.9 needs its bundled NVIDIA libs on the loader path for any import.
   export LD_LIBRARY_PATH=\$(ls -d '$VENV'/lib/python3.12/site-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\${LD_LIBRARY_PATH:-}
   if ! \$P -c 'from flash_attn import flash_attn_func' 2>/dev/null; then

@@ -11,7 +11,7 @@ method.
 | `workflows/dtdd_alfworld_workflow.py` | the ALFWorld environment loop |
 | `configs/dtdd_lora.yaml`, `configs/opd_lora.yaml` | the two paper arms (LoRA, tau = 0.7, 400 steps) |
 | `train.sbatch`, `eval.sbatch` | launchers (training; full held-out benchmark of saved checkpoints) |
-| `make_venv.sh`, `requirements-lock.txt` | the environment and its frozen pins |
+| `make_venv.sh`, `requirements-venv.txt`, `requirements-lock.txt` | the environment: the exact package layer it installs over the image, and the full freeze |
 
 ## Environment
 
@@ -21,7 +21,7 @@ ALFWorld/TextWorld, which it lacks. The image itself stays unmodified.
 
 | | |
 |---|---|
-| Venv | `make_venv.sh <dir>` (runs inside the container, so start it from a compute node); freeze in `requirements-lock.txt` |
+| Venv | `make_venv.sh <dir>` (runs inside the container, so start it from a compute node); installs the exact layer in `requirements-venv.txt`; full freeze in `requirements-lock.txt` |
 | Overrides | torch 2.8.0 → **2.9.1** · vLLM 0.11.0 → **0.14.1** · Ray 2.49.2 → **2.56.1** · flash-attn 2.8.1 rebuilt for torch 2.9 · numpy 1.26.4 · scipy 1.13.1 |
 | Added | alfworld 0.4.2 · textworld 1.7.0 · peft 0.17.1 |
 | Editable | `trinity_rft` → `third_party/TCOD` (the patched checkout is what gets imported) |
