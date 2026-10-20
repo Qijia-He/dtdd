@@ -60,8 +60,9 @@ apptainer exec --nv --bind "$DTDD_ROOT" --bind "$(dirname "$VENV")" "$SIF" bash 
   # checkout, so the overlay and the DTDD workflows are what gets imported.
   \$P -m pip install --progress-bar off --no-deps -r '$LAYER'
   \$P -m pip install --quiet --no-deps -e .
-  # torch 2.9 needs its bundled NVIDIA libs on the loader path for any import.
-  export LD_LIBRARY_PATH=\$(ls -d '$VENV'/lib/python3.12/site-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\${LD_LIBRARY_PATH:-}
+  # torch 2.9 needs the NVIDIA libs on the loader path for any import: the venv's own
+  # (nccl, nvshmem) first, then the image's, which the venv inherits (e.g. cusparselt).
+  export LD_LIBRARY_PATH=\$(ls -d '$VENV'/lib/python3.12/site-packages/nvidia/*/lib /usr/local/lib/python3.12/dist-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\${LD_LIBRARY_PATH:-}
   if ! \$P -c 'from flash_attn import flash_attn_func' 2>/dev/null; then
     echo '== compiling flash-attn $FLASH_ATTN_PIN for the venv torch (needs nvcc; several minutes)'
     \$P -m pip install --quiet --no-build-isolation --force-reinstall --no-deps 'flash-attn==$FLASH_ATTN_PIN'

@@ -87,7 +87,7 @@ apptainer exec --nv --bind "${BIND_ROOT:-$DTDD_ROOT}" "$SIF" bash -c "
   export PATH=$VENV/bin:\$PATH TMPDIR=$JOB_TMP PIP_CACHE_DIR=$JOB_TMP/pip
   export TRITON_CACHE_DIR=$JOB_TMP/triton TORCHINDUCTOR_CACHE_DIR=$JOB_TMP/inductor
   # The venv's torch needs its bundled NVIDIA libraries on the loader path.
-  export LD_LIBRARY_PATH=\$(ls -d $VENV/lib/python3.12/site-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\$LD_LIBRARY_PATH
+  export LD_LIBRARY_PATH=\$(ls -d $VENV/lib/python3.12/site-packages/nvidia/*/lib /usr/local/lib/python3.12/dist-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\$LD_LIBRARY_PATH
   cd $TCOD
   $VENV/bin/python -c 'import torch, vllm, trinity, verl; print(\"env OK torch\", torch.__version__, \"vllm\", vllm.__version__)' || { echo ENV_BROKEN; exit 1; }
   $VENV/bin/ray stop --force 2>/dev/null

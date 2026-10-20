@@ -85,7 +85,7 @@ apptainer exec --nv --bind "${BIND_ROOT:-$DTDD_ROOT}" "$SIF" bash -c "
   set -o pipefail
   export PATH=$VENV/bin:\$PATH TMPDIR=$JOB_TMP PIP_CACHE_DIR=$JOB_TMP/pip
   export TRITON_CACHE_DIR=$JOB_TMP/triton TORCHINDUCTOR_CACHE_DIR=$JOB_TMP/inductor
-  export LD_LIBRARY_PATH=\$(ls -d $VENV/lib/python3.12/site-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\$LD_LIBRARY_PATH
+  export LD_LIBRARY_PATH=\$(ls -d $VENV/lib/python3.12/site-packages/nvidia/*/lib /usr/local/lib/python3.12/dist-packages/nvidia/*/lib 2>/dev/null | tr '\n' ':')\$LD_LIBRARY_PATH
   cd $TCOD
   $VENV/bin/python -c 'import torch, vllm, trinity, peft; print(\"env OK\")' || { echo ENV_BROKEN; exit 1; }
   $(declare -f render)
