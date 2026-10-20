@@ -35,6 +35,10 @@ SCIPY_PIN=1.13.1
 # installed with --no-deps. Re-resolving with pip instead does not work any more: packages
 # outside the pins have moved on, and their new requirements contradict the frozen ones.
 LAYER=$DTDD_ROOT/alfworld/requirements-venv.txt
+if [ -f "$VENV/pyvenv.cfg" ] && ! grep -q 'include-system-site-packages = true' "$VENV/pyvenv.cfg"; then
+  echo "ERROR: $VENV exists but was not created with --system-site-packages; remove it and re-run." >&2
+  exit 1
+fi
 
 apptainer exec --nv --bind "$DTDD_ROOT" --bind "$(dirname "$VENV")" "$SIF" bash -c "
   set -euo pipefail
