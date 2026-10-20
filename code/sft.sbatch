@@ -14,7 +14,7 @@
 # 115 updates on 4 GPUs), then merge the final checkpoint into
 # models/Qwen3-1.7B-SOD-SFT, the path code/train.sbatch reads.
 #
-#   sbatch code/sft.sbatch
+#   sbatch code/sft.sbatch                      # extra args go to the SFT trainer as hydra overrides
 #
 # Inputs (relative to DTDD_ROOT unless absolute):
 #   BASE_MODEL  models/Qwen3-1.7B  (Qwen/Qwen3-1.7B)
@@ -43,7 +43,8 @@ trap 'rm -rf /tmp/${USER}_${SLURM_JOB_ID} 2>/dev/null || true' EXIT
 export WANDB_MODE=${WANDB_MODE:-offline}
 export NPROC_PER_NODE=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
 
-( cd "$DTDD_ROOT/third_party/SOD" && bash examples/SOD/run_sft.sh model.use_liger=True )
+# Extra arguments are passed through as hydra overrides (e.g. trainer.total_training_steps=2).
+( cd "$DTDD_ROOT/third_party/SOD" && bash examples/SOD/run_sft.sh model.use_liger=True "$@" )
 
 STEP=$(cat "$SAVE_PATH/latest_checkpointed_iteration.txt")
 python3 -m verl.model_merger merge --backend fsdp \
