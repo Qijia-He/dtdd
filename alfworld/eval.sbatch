@@ -37,7 +37,7 @@ TCOD=${DTDD_ROOT}/third_party/TCOD
 ENV=alfworld
 ARM=${ARM:?arm name, e.g. dtdd_lora_alfworld}
 STEPS=${STEPS:?space-separated checkpoint steps, or 0 for a raw model}
-CONFIG=${CONFIG:?template under alfworld/configs/}
+CONFIG=$(realpath "${CONFIG:?template under alfworld/configs/}")   # absolute: rendered from inside third_party/TCOD
 MERGE=${MERGE:-1}
 
 CHECKPOINT_ROOT=${CHECKPOINT_ROOT:-${DTDD_ROOT}/agent_ckpts}
