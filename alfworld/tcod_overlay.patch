@@ -191,7 +191,7 @@ index c505f77..e7899b4 100644
          # custom workflows
          "sudoku_workflow": "trinity.common.workflows.envs.sudoku.sudoku_workflow.SudokuWorkflow",
          "OPD_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.OPD_workflow.OnPolicyDistillVerlAgentAlfworldWorkflow",
-+        "DTDD_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.DTDD_workflow.DTDD_alfworld_workflow",
++        "DTDD_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.DTDD_workflow.DTDDAlfworldWorkflow",
          "TCOD_f2b_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.TCOD_f2b_workflow.TCOD_f2b_alfworld_workflow",
          "TCOD_b2f_alfworld_workflow": "trinity.common.workflows.envs.TCOD.alfworld.TCOD_b2f_workflow.TCOD_b2f_alfworld_workflow",
          "OPD_scienceworld_workflow": "trinity.common.workflows.envs.TCOD.scienceworld.OPD_workflow.OnPolicyDistillVerlAgentScienceworldWorkflow",
