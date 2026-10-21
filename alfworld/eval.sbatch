@@ -42,7 +42,7 @@ MERGE=${MERGE:-1}
 
 CHECKPOINT_ROOT=${CHECKPOINT_ROOT:-${DTDD_ROOT}/agent_ckpts}
 CKROOT=${CKROOT:-$CHECKPOINT_ROOT/DTDD_${ENV}/$ARM}
-BASE=${STUDENT_MODEL:-models/Qwen2.5-3B-Instruct}
+BASE=$(realpath "${STUDENT_MODEL:-models/Qwen2.5-3B-Instruct}")   # absolute: the merge runs from inside third_party/TCOD
 BUFFER_DIR=${BUFFER_DIR:-${DTDD_ROOT}/agent_buffers}
 HF_HOME=${HF_HOME:-${DTDD_ROOT}/hf_cache}
 PROJECT=${PROJECT:-DTDD_${ENV}}
