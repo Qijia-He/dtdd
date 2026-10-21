@@ -46,13 +46,16 @@ BASE=$(realpath "${STUDENT_MODEL:-models/Qwen2.5-3B-Instruct}")   # absolute: th
 BUFFER_DIR=${BUFFER_DIR:-${DTDD_ROOT}/agent_buffers}
 HF_HOME=${HF_HOME:-${DTDD_ROOT}/hf_cache}
 PROJECT=${PROJECT:-DTDD_${ENV}}
-TEACHER_MODEL=${TEACHER_MODEL:-models/GiGPO-Qwen2.5-7B-Instruct-ALFWorld}
-DATA_DIR=${DATA_DIR:-$TCOD/TCOD_examples/alfworld/alfworld_data}
+TEACHER_MODEL=$(realpath "${TEACHER_MODEL:-models/GiGPO-Qwen2.5-7B-Instruct-ALFWorld}")
+DATA_DIR=$(realpath "${DATA_DIR:-$TCOD/TCOD_examples/alfworld/alfworld_data}")
 export ALFWORLD_DATA=${ALFWORLD_DATA:?set ALFWORLD_DATA (see README, ALFWorld data)}
 
 JOB_TMP=/tmp/${USER}_${SLURM_JOB_ID}
 mkdir -p $JOB_TMP/{triton,inductor,ray,pip,merged,wandb,dummy_lora}
 trap "rm -rf $JOB_TMP 2>/dev/null || true" EXIT
+# render() runs inside the container (passed in via declare -f), so everything it reads
+# must be in the environment, not just in this shell.
+export JOB_TMP PROJECT CHECKPOINT_ROOT TEACHER_MODEL DATA_DIR BUFFER_DIR HF_HOME CONFIG
 _n_gpus=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
 echo "host=$(hostname) env=$ENV arm=$ARM steps=$STEPS $(date)"
 
