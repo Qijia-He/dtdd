@@ -55,8 +55,9 @@ mkdir -p $JOB_TMP/{triton,inductor,ray,pip,merged,wandb,dummy_lora}
 trap "rm -rf $JOB_TMP 2>/dev/null || true" EXIT
 # render() runs inside the container (passed in via declare -f), so everything it reads
 # must be in the environment, not just in this shell.
-export JOB_TMP PROJECT CHECKPOINT_ROOT TEACHER_MODEL DATA_DIR BUFFER_DIR HF_HOME CONFIG
 _n_gpus=$(tr ',' '\n' <<< "$CUDA_VISIBLE_DEVICES" | wc -l)
+NGPU=$_n_gpus
+export JOB_TMP PROJECT CHECKPOINT_ROOT TEACHER_MODEL DATA_DIR BUFFER_DIR HF_HOME CONFIG NGPU
 echo "host=$(hostname) env=$ENV arm=$ARM steps=$STEPS $(date)"
 
 export TRINITY_DUMMY_LORA_DIR=$JOB_TMP/dummy_lora
@@ -75,11 +76,24 @@ render() {  # $1 = student path, $2 = run name -> prints rendered yaml path
       -e "s#__BUFFER_DIR__#${BUFFER_DIR}#g" \
       -e "s#__HF_HOME__#${HF_HOME}#g" \
       "$CONFIG" > "$out"
-  # A benchmark-only run: evaluate the student as loaded, train nothing.
-  sed -i -e 's/^\(\s*\)eval_on_startup:.*/\1eval_on_startup: true/' \
+  # A benchmark-only run, as the paper's benchmark template was: explorer only (mode: bench,
+  # so no trainer claims GPUs), on this job's GPUs, over every task of the two evaluation
+  # files, evaluating the student as loaded (eval_on_startup; bench_on_latest_checkpoint
+  # stays false, otherwise trinity would reload weights from a training checkpoint).
+  local n_seen n_unseen
+  n_seen=$(grep -c . "$DATA_DIR/test.jsonl"); n_unseen=$(grep -c . "$DATA_DIR/test_unseen.jsonl")
+  sed -i -e '/^name: /a mode: bench' \
+         -e "s/^\(\s*\)gpu_per_node:.*/\1gpu_per_node: ${NGPU}/" \
+         -e 's/^\(\s*\)eval_on_startup:.*/\1eval_on_startup: true/' \
          -e 's/^\(\s*\)bench_on_latest_checkpoint:.*/\1bench_on_latest_checkpoint: false/' \
-         -e 's/^\(\s*\)continue_from_checkpoint:.*/\1continue_from_checkpoint: false/' \
-         -e 's/^\(\s*\)total_steps: [0-9]*\s*$/\1total_steps: 0/' "$out"
+         -e 's/^\(\s*\)continue_from_checkpoint:.*/\1continue_from_checkpoint: false/' "$out"
+  # total_steps: the two indented ones belong to the eval tasksets (seen, then unseen) and
+  # become their task counts; the top-level ones (buffer, trainer) become 0.
+  awk -v a="$n_seen" -v b="$n_unseen" '
+    $1 == "total_steps:" { ind = match($0, /[^ ]/) - 1
+                           if (ind >= 6) { k++; v = (k == 1 ? a : b) } else { v = 0 }
+                           printf "%stotal_steps: %s\n", substr($0, 1, ind), v; next }
+    { print }' "$out" > "$out.tmp" && mv "$out.tmp" "$out"
   grep -q "__[A-Z_]*__" "$out" && { echo "unrendered placeholder in $out" >&2; return 1; }
   echo "$out"
 }
