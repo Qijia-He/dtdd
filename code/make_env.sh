@@ -63,9 +63,10 @@ echo "== installing torch $TORCH_PIN (cu124) and vLLM $VLLM_PIN"
 
 echo "== installing the SOD base (editable) and its extras"
 "$PYTHON" -m pip install --quiet -c "$CONSTRAINTS" -e "$SOD[vllm,math]"
-# liger-kernel is the other half of SOD's [gpu] extra (code/sft.sbatch runs the SFT
-# with model.use_liger=True); flash-attn, the first half, comes from a wheel below.
-"$PYTHON" -m pip install --quiet -c "$CONSTRAINTS" liger-kernel
+# Then the rest of the frozen environment, exactly, with --no-deps: the SOD extras do not
+# cover everything its code imports (e.g. liger-kernel for the SFT stage's use_liger,
+# anthropic for recipe/demystify/reward.py). Already-installed pins are skipped.
+"$PYTHON" -m pip install --quiet --no-deps -r "$CONSTRAINTS"
 
 if ! "$PYTHON" -c 'import flash_attn' 2>/dev/null; then
   echo "== installing flash-attn (prebuilt wheel)"
@@ -83,7 +84,7 @@ import importlib
 
 want = {"torch": "$TORCH_PIN", "vllm": "$VLLM_PIN", "verl": None,
         "ray": None, "transformers": None, "flash_attn": None,
-        "hydra": None, "omegaconf": None, "tensordict": None, "liger_kernel": None,
+        "hydra": None, "omegaconf": None, "tensordict": None, "liger_kernel": None, "anthropic": None,
         "pyarrow": None, "datasets": None}
 bad = []
 for name, pin in want.items():
