@@ -63,6 +63,9 @@ echo "== installing torch $TORCH_PIN (cu124) and vLLM $VLLM_PIN"
 
 echo "== installing the SOD base (editable) and its extras"
 "$PYTHON" -m pip install --quiet -c "$CONSTRAINTS" -e "$SOD[vllm,math]"
+# liger-kernel is the other half of SOD's [gpu] extra (code/sft.sbatch runs the SFT
+# with model.use_liger=True); flash-attn, the first half, comes from a wheel below.
+"$PYTHON" -m pip install --quiet -c "$CONSTRAINTS" liger-kernel
 
 if ! "$PYTHON" -c 'import flash_attn' 2>/dev/null; then
   echo "== installing flash-attn (prebuilt wheel)"
@@ -80,7 +83,7 @@ import importlib
 
 want = {"torch": "$TORCH_PIN", "vllm": "$VLLM_PIN", "verl": None,
         "ray": None, "transformers": None, "flash_attn": None,
-        "hydra": None, "omegaconf": None, "tensordict": None,
+        "hydra": None, "omegaconf": None, "tensordict": None, "liger_kernel": None,
         "pyarrow": None, "datasets": None}
 bad = []
 for name, pin in want.items():
